@@ -33,8 +33,9 @@ import java.util.UUID;
 
 /**
  * Начал ломать бревно — над ним появляется счётчик брёвен в связке.
- * Сломал бревно — ломается вся связка брёвен и прилегающая природная листва,
- * лут выпадает на месте. С зажатым Shift всё работает как в ванили.
+ * Каждое «сломанное» бревно уменьшает счётчик (блок остаётся на месте);
+ * когда сломано столько раз, сколько брёвен в дереве, падает всё дерево
+ * вместе с природной листвой, лут выпадает на месте. С зажатым Shift всё работает как в ванили.
  */
 public final class TreeChopPlugin extends JavaPlugin implements Listener {
 
@@ -44,6 +45,10 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
     private static final int MAX_LEAVES = 2000;
 
     private final Map<UUID, TextDisplay> indicators = new HashMap<>();
+    /** Ключ дерева (самое нижнее бревно) -> сколько брёвен уже «сломано». */
+    private final Map<String, Integer> hits = new HashMap<>();
+    private final Map<String, Long> lastHit = new HashMap<>();
+    private static final long FORGET_MS = 5 * 60 * 1000;
     private boolean chopping = false;
 
     @Override
@@ -70,8 +75,10 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
         removeIndicator(player);
         if (!Tag.LOGS.isTagged(block.getType()) || !active(player)) return;
 
-        int count = findLogs(block).size();
-        String text = count >= MAX_LOGS ? MAX_LOGS + "+ брёвен" : "Брёвен: " + count;
+        Set<Block> logs = findLogs(block);
+        int count = logs.size();
+        int left = count - hits.getOrDefault(treeKey(logs), 0);
+        String text = "Брёвен: " + left + " / " + count + (count >= MAX_LOGS ? "+" : "");
         Location loc = block.getLocation().add(0.5, 1.25, 0.5);
         TextDisplay display = block.getWorld().spawn(loc, TextDisplay.class, d -> {
             d.text(Component.text(text, NamedTextColor.GOLD));
@@ -101,7 +108,7 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
 
     // ---------- Рубка ----------
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
         if (chopping) return; // события, которые мы сами вызываем ниже
         Player player = event.getPlayer();
@@ -110,6 +117,28 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
         if (!Tag.LOGS.isTagged(origin.getType()) || !active(player)) return;
 
         Set<Block> logs = findLogs(origin);
+        String key = treeKey(logs);
+        long now = System.currentTimeMillis();
+        hits.entrySet().removeIf(e -> now - lastHit.getOrDefault(e.getKey(), 0L) > FORGET_MS);
+        lastHit.keySet().retainAll(hits.keySet());
+
+        int done = hits.getOrDefault(key, 0) + 1;
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        boolean survival = player.getGameMode() != GameMode.CREATIVE;
+
+        if (done < logs.size()) {
+            // Дерево ещё стоит: блок не ломаем, засчитываем удар
+            event.setCancelled(true);
+            hits.put(key, done);
+            lastHit.put(key, now);
+            if (survival) damageTool(player, hand);
+            player.sendActionBar(Component.text("Брёвен: " + (logs.size() - done) + " / " + logs.size(), NamedTextColor.GOLD));
+            return;
+        }
+
+        // Последний удар — валим всё дерево
+        hits.remove(key);
+        lastHit.remove(key);
         logs.remove(origin); // его ломает сама игра
         List<Block> leaves = findLeaves(origin, logs);
 
@@ -122,8 +151,6 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
                 if (!canBreak(log, player)) continue;
                 if (survival) {
                     log.breakNaturally(tool);
-                    if (damageTool(player, tool)) break; // топор сломался
-                    tool = player.getInventory().getItemInMainHand();
                 } else {
                     log.setType(org.bukkit.Material.AIR);
                 }
@@ -137,6 +164,17 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
         } finally {
             chopping = false;
         }
+    }
+
+    /** Дерево определяется по самому нижнему бревну связки. */
+    private static String treeKey(Set<Block> logs) {
+        Block min = null;
+        for (Block b : logs) {
+            if (min == null || b.getY() < min.getY()
+                    || (b.getY() == min.getY() && (b.getX() < min.getX()
+                    || (b.getX() == min.getX() && b.getZ() < min.getZ())))) min = b;
+        }
+        return min.getWorld().getName() + ":" + min.getX() + ":" + min.getY() + ":" + min.getZ();
     }
 
     /** Даём другим плагинам (приваты и т.п.) запретить ломание блока. */
