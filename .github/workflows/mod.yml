@@ -38,20 +38,19 @@ jobs:
         run: |
           J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
           echo "=====PROBE====="
-          unzip -l "$J" | grep -Eo 'net/minecraft/client/gui/[A-Za-z]*Graphic[A-Za-z]*\.class'
-          javap -cp "$J" -p net.minecraft.client.Minecraft | grep -i gizmo
-          javap -cp "$J" -p net.minecraft.client.renderer.LevelRenderer | grep -i gizmo
-          javap -cp "$J" -p net.minecraft.client.renderer.GameRenderer | grep -i gizmo
+          set +e
+          javap -cp "$J" net.minecraft.client.gui.GuiGraphicsExtractor | grep -Ei 'string|fill\(|text\(' | head -15
           javap -cp "$J" net.minecraft.gizmos.GizmoProperties
+          javap -cp "$J" -p 'net.minecraft.gizmos.Gizmos$TemporaryCollection' | head -5
           F=$(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -name 'fabric-rendering-v1-*.jar' | grep -v sources | head -1)
-          javap -cp "$F:$J" net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
           javap -cp "$F:$J" net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
           javap -cp "$F:$J" net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry | grep static
-          javap -cp "$F:$J" 'net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents$EndMain' 2>/dev/null
-          for c in $(unzip -l "$F" | grep -Eo 'net/fabricmc/fabric/api/client/rendering/v1/level/LevelRenderEvents\$[A-Za-z]+' | sort -u); do javap -cp "$F:$J" "${c//\//.}" | grep -v '^Compiled'; done
+          javap -cp "$F:$J" net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements | grep static | head -5
           M=$(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -name 'fabric-message-api-v1-*.jar' | grep -v sources | head -1)
           javap -cp "$M:$J" net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
           for c in $(unzip -l "$M" | grep -Eo 'net/fabricmc/fabric/api/client/message/v1/ClientReceiveMessageEvents\$[A-Za-z]+' | sort -u); do javap -cp "$M:$J" "${c//\//.}" | grep -v '^Compiled'; done
+          S=$(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -name 'fabric-screen-api-v1-*.jar' | grep -v sources | head -1)
+          javap -cp "$S:$J" net.fabricmc.fabric.api.client.screen.v1.ScreenEvents | grep static
           echo "=====END====="
 
       - uses: actions/upload-artifact@v4
