@@ -30,6 +30,20 @@ public abstract class EntityRendererMixin {
             }
         }
 
+        if (entity instanceof Animal a && a.isBaby()) {
+            long left = BreedingTracker.growTicksLeft(entity);
+            if (left >= 0) {
+                long sec = left / 20;
+                MutableComponent timer = Component.literal(String.format("⏳ %d:%02d", sec / 60, sec % 60))
+                        .withStyle(ChatFormatting.AQUA);
+                state.nameTag = state.nameTag == null ? timer
+                        : Component.empty().append(state.nameTag).append(" ").append(timer);
+                if (state.nameTagAttachment == null) {
+                    state.nameTagAttachment = new Vec3(0, entity.getBbHeight() + 0.5, 0);
+                }
+            }
+        }
+
         if (BreedingIndicatorClient.isHighlighted(entity)) {
             state.outlineColor = BreedingIndicatorClient.HIGHLIGHT_COLOR;
         }

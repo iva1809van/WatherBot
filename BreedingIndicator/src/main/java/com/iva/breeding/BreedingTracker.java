@@ -58,8 +58,21 @@ public final class BreedingTracker {
         }
     }
 
+    /** Детёныш растёт 20 минут (24000 тиков). */
+    public static final long GROW_TICKS = 24000;
+    /** uuid детёныша -> тик, когда он вырастет */
+    private static final Map<UUID, Long> grownAt = new HashMap<>();
+
+    /** Сколько тиков осталось до взросления, или -1, если рождение не видели. */
+    public static long growTicksLeft(Entity baby) {
+        Long at = grownAt.get(baby.getUUID());
+        if (at == null) return -1;
+        return Math.max(0, at - now());
+    }
+
     private static void onBabySeen(Animal baby) {
         long t = now();
+        boolean born = false;
         var level = baby.level();
         for (Animal parent : level.getEntitiesOfClass(Animal.class, baby.getBoundingBox().inflate(6))) {
             if (parent == baby || parent.isBaby() || parent.getType() != baby.getType()) continue;
@@ -68,7 +81,10 @@ public final class BreedingTracker {
             if (parent.distanceToSqr(baby) > PARENT_RADIUS_SQ) continue;
             inLove.remove(parent.getUUID());
             cooldownUntil.put(parent.getUUID(), t + COOLDOWN_TICKS);
+            born = true;
         }
+        // Таймер роста — только если это действительно новорождённый (рядом были родители)
+        if (born) grownAt.put(baby.getUUID(), t + GROW_TICKS);
     }
 
     /** Животное недавно покормили (сердечки) — повторно кормить не нужно. */
@@ -94,11 +110,13 @@ public final class BreedingTracker {
             if (it.next() <= t) it.remove();
         }
         inLove.values().removeIf(v -> t - v > LOVE_WINDOW_TICKS);
+        grownAt.values().removeIf(v -> v <= t);
     }
 
     public static void reset() {
         inLove.clear();
         cooldownUntil.clear();
         recentlyLoaded.clear();
+        grownAt.clear();
     }
 }

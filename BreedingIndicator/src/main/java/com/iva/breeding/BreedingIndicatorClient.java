@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -26,6 +27,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -41,6 +44,11 @@ public class BreedingIndicatorClient implements ClientModInitializer {
     private static Set<Entity> highlighted = Collections.emptySet();
     private static KeyMapping toggleKey;
     private static KeyMapping feedKey;
+    private static KeyMapping herdKey;
+    private static boolean herdEnabled = false;
+    /** Строки счётчика стада, пересчитываются раз в секунду. */
+    private static List<String> herdLines = List.of();
+    private static final double HERD_RADIUS = 32;
     private static final java.util.ArrayDeque<Animal> feedQueue = new java.util.ArrayDeque<>();
     private static int feedCooldown = 0;
 
@@ -56,6 +64,18 @@ public class BreedingIndicatorClient implements ClientModInitializer {
                 "key.breedingindicator.highlight", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_H, category));
         feedKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.breedingindicator.feed", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_J, category));
+        herdKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.breedingindicator.herd", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K, category));
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("breedingindicator", "herd"), (g, delta) -> {
+            if (!herdEnabled || herdLines.isEmpty()) return;
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.options.hideGui) return;
+            int y = 4;
+            for (String line : herdLines) {
+                g.text(mc.font, line, 4, y, 0xFFFFFFFF, true);
+                y += 10;
+            }
+        });
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, level) -> BreedingTracker.onEntityLoad(entity));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> BreedingTracker.reset());
@@ -78,6 +98,8 @@ public class BreedingIndicatorClient implements ClientModInitializer {
             return;
         }
         BreedingTracker.tick();
+        while (herdKey.consumeClick()) herdEnabled = !herdEnabled;
+        if (herdEnabled && mc.level.getGameTime() % 20 == 0) herdLines = countHerd(mc);
         while (feedKey.consumeClick()) startFeeding(mc);
         feedTick(mc);
         if (mc.level.getGameTime() % 100 == 0) BreedingTracker.cleanup();
@@ -96,6 +118,28 @@ public class BreedingIndicatorClient implements ClientModInitializer {
             if (visible(mc, eye, a)) result.add(a);
         }
         highlighted = result;
+    }
+
+    /** Счётчик животных рядом: вид — всего (детёнышей, на перезарядке). */
+    private static List<String> countHerd(Minecraft mc) {
+        Map<String, int[]> counts = new TreeMap<>();
+        AABB area = mc.player.getBoundingBox().inflate(HERD_RADIUS);
+        for (Animal a : mc.level.getEntitiesOfClass(Animal.class, area)) {
+            int[] c = counts.computeIfAbsent(a.getType().getDescription().getString(), k -> new int[3]);
+            c[0]++;
+            if (a.isBaby()) c[1]++;
+            else if (BreedingTracker.onCooldown(a)) c[2]++;
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("§6Животные рядом (" + (int) HERD_RADIUS + " бл.):");
+        if (counts.isEmpty()) lines.add("§7нет");
+        counts.forEach((name, c) -> {
+            StringBuilder sb = new StringBuilder("§f").append(name).append(": §e").append(c[0]);
+            if (c[1] > 0) sb.append(" §b(детёнышей ").append(c[1]).append(")");
+            if (c[2] > 0) sb.append(" §c(перезарядка ").append(c[2]).append(")");
+            lines.add(sb.toString());
+        });
+        return lines;
     }
 
     /** Собирает всех животных в зоне досягаемости, которых можно покормить едой в руке. */

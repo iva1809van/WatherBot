@@ -1,5 +1,6 @@
 {
   "key.breedingindicator.highlight": "Highlight breedable animals",
   "key.category.breedingindicator.main": "Breeding Indicator",
-  "key.breedingindicator.feed": "Feed all nearby animals"
+  "key.breedingindicator.feed": "Feed all nearby animals",
+  "key.breedingindicator.herd": "Herd counter"
 }
