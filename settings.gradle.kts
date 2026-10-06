@@ -1,1 +1,3 @@
-rootProject.name = "ShearFrames"
+rootProject.name = "MinecraftPlugins"
+
+include("ShearFrames", "FlatSigns", "VillagerTrades")

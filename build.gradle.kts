@@ -1,26 +1,26 @@
-plugins {
-    java
-}
+subprojects {
+    apply(plugin = "java")
 
-group = "com.iva"
-version = "1.0.0"
+    group = "com.iva"
+    version = "1.0.0"
 
-repositories {
-    mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
-}
+    repositories {
+        mavenCentral()
+        maven("https://repo.papermc.io/repository/maven-public/")
+    }
 
-dependencies {
-    // Paper 26.1.1 API (как на сервере: 26.1.1.build.N-...)
-    compileOnly("io.papermc.paper:paper-api:26.1.1.build.+")
-}
+    dependencies {
+        // Paper 26.1.1 API (как на сервере: 26.1.1.build.N-...)
+        "compileOnly"("io.papermc.paper:paper-api:26.1.1.build.+")
+    }
 
-java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
-}
+    extensions.configure<JavaPluginExtension> {
+        toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+    }
 
-tasks.processResources {
-    filesMatching("plugin.yml") {
-        expand("version" to project.version)
+    tasks.named<ProcessResources>("processResources") {
+        filesMatching("plugin.yml") {
+            expand("version" to project.version)
+        }
     }
 }
