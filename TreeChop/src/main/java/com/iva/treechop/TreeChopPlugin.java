@@ -143,7 +143,6 @@ public final class TreeChopPlugin extends JavaPlugin implements Listener {
         List<Block> leaves = findLeaves(origin, logs);
 
         ItemStack tool = player.getInventory().getItemInMainHand();
-        boolean survival = player.getGameMode() != GameMode.CREATIVE;
 
         chopping = true;
         try {
