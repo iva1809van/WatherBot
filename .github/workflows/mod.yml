@@ -20,6 +20,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
+          cache-cleanup: never
 
       - name: Resolve Fabric versions for 26.1.2
         run: |
@@ -35,14 +36,14 @@ jobs:
       - name: Probe Minecraft classes
         if: always()
         run: |
-          JAR=$(find ~/.gradle .gradle -name 'minecraft-*client*.jar' -o -name 'minecraft-merged*.jar' -o -name 'minecraft-common*.jar' 2>/dev/null | grep -v sources | head -3)
-          echo "$JAR"
-          for j in $JAR; do
-            for c in net.minecraft.client.Minecraft net.minecraft.world.entity.AgeableMob net.minecraft.world.entity.animal.Animal net.minecraft.world.entity.Entity; do
-              javap -cp "$j" -p "$c" 2>/dev/null | grep -Ei 'glow|teamcolor|getAge|handleEntityEvent|isBaby|inLove|outline' || true
-            done
+          J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
+          echo "=====PROBE====="
+          for c in net.minecraft.client.renderer.entity.EntityRenderer net.minecraft.client.renderer.entity.state.EntityRenderState net.minecraft.client.KeyMapping 'net.minecraft.client.KeyMapping$Category' net.minecraft.world.level.ClipContext; do
+            echo "## $c"; javap -cp "$J" -p "$c" 2>&1 | grep -Ev 'lambda\$|^Compiled' | head -60
           done
-          ls ~/.gradle/caches/fabric-loom 2>/dev/null | head; find ~/.gradle/caches -path '*fabric-api*' -name '*rendering*' 2>/dev/null | head -5
+          unzip -l "$J" | grep -Eo 'net/minecraft/resources/[A-Za-z]+\.class' | head
+          for f in $(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -name '*.jar' | grep -E 'key-mapping|keybind|lifecycle-events|events-interaction|networking' ); do echo "## $f"; unzip -l "$f" | grep -Eo 'net/fabricmc/fabric/api/client/[^ ]*\.class' | grep -v impl | head -20; done
+          echo "=====END====="
 
       - uses: actions/upload-artifact@v4
         if: success()
