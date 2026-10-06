@@ -1,6 +1,9 @@
 package com.iva.traderpost;
 
 import org.bukkit.Material;
+import org.bukkit.Registry;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
 
@@ -57,7 +60,64 @@ final class TradePool {
             new Buy(Material.GOLD_INGOT, 4, 1, 6), new Buy(Material.DIAMOND, 1, 4, 4)
     );
 
+    /** Шансы ультра-редких трейдов (на каждую смену трейдов). */
+    static final double SCRAP_CHANCE = 0.04;
+    static final double STAR_CHANCE = 0.02;
+    static final double BOOK_CHANCE = 0.06;
+
     private TradePool() {}
+
+    private static int between(Random r, int min, int max) {
+        return min + r.nextInt(max - min + 1);
+    }
+
+    /** Ультра-редкие трейды: незеритовый лом, звезда Незера, зачарованная книга. */
+    private static void addUltraRare(List<MerchantRecipe> recipes, Random random) {
+        if (random.nextDouble() < SCRAP_CHANCE) {
+            MerchantRecipe r = new MerchantRecipe(new ItemStack(Material.NETHERITE_SCRAP), 1);
+            r.addIngredient(new ItemStack(Material.EMERALD, between(random, 10, 25)));
+            r.setExperienceReward(true);
+            recipes.add(0, r);
+        }
+        if (random.nextDouble() < STAR_CHANCE) {
+            MerchantRecipe r = new MerchantRecipe(new ItemStack(Material.NETHER_STAR), 1);
+            r.addIngredient(new ItemStack(Material.EMERALD, between(random, 45, 64)));
+            r.setExperienceReward(true);
+            recipes.add(0, r);
+        }
+        if (random.nextDouble() < BOOK_CHANCE) {
+            MerchantRecipe book = randomBook(random);
+            if (book != null) recipes.add(0, book);
+        }
+    }
+
+    /**
+     * Любое зачарование любого уровня. Цена как у библиотекаря
+     * (2 + rand(0..5+10·ур) + 3·ур, ×2 для сокровищ), затем +50%, максимум 64.
+     */
+    private static MerchantRecipe randomBook(Random random) {
+        List<Enchantment> all = new ArrayList<>();
+        Registry.ENCHANTMENT.forEach(all::add);
+        if (all.isEmpty()) return null;
+        Enchantment ench = all.get(random.nextInt(all.size()));
+        int level = between(random, ench.getStartLevel(), ench.getMaxLevel());
+
+        int price = 2 + random.nextInt(5 + level * 10) + 3 * level;
+        if (ench.isTreasure()) price *= 2;
+        price = (int) Math.ceil(price * 1.5);
+        price = Math.max(1, Math.min(64, price));
+
+        ItemStack result = new ItemStack(Material.ENCHANTED_BOOK);
+        if (result.getItemMeta() instanceof EnchantmentStorageMeta meta) {
+            meta.addStoredEnchant(ench, level, true);
+            result.setItemMeta(meta);
+        }
+        MerchantRecipe r = new MerchantRecipe(result, 1);
+        r.addIngredient(new ItemStack(Material.EMERALD, price));
+        r.addIngredient(new ItemStack(Material.BOOK));
+        r.setExperienceReward(true);
+        return r;
+    }
 
     /** Случайный набор: 5–7 товаров на продажу и 2–3 скупки. */
     static List<MerchantRecipe> roll(Random random) {
@@ -67,6 +127,7 @@ final class TradePool {
         Collections.shuffle(buys, random);
 
         List<MerchantRecipe> recipes = new ArrayList<>();
+        addUltraRare(recipes, random);
         int sellCount = 5 + random.nextInt(3);
         for (int i = 0; i < sellCount; i++) {
             Sell s = sells.get(i);
