@@ -1,1 +1,1 @@
-rootProject.name = "InvisibleFrames"
+rootProject.name = "ShearFrames"

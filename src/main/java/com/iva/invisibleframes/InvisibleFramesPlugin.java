@@ -31,7 +31,7 @@ public final class InvisibleFramesPlugin extends JavaPlugin implements Listener 
 
         ItemStack hand = player.getInventory().getItemInMainHand();
         if (hand.getType() != Material.SHEARS) return;
-        if (!player.hasPermission("invisibleframes.use")) return;
+        if (!player.hasPermission("shearframes.use")) return;
 
         // Не даём повернуть/вставить предмет в рамку
         event.setCancelled(true);

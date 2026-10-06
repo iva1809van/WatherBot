@@ -11,8 +11,8 @@ repositories {
 }
 
 dependencies {
-    // Paper 26.1.2 API (новая схема версий Paper: 26.1.2.build.N-...)
-    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    // Paper 26.1.1 API (как на сервере: 26.1.1.build.N-...)
+    compileOnly("io.papermc.paper:paper-api:26.1.1.build.+")
 }
 
 java {
