@@ -1,3 +1,3 @@
 rootProject.name = "MinecraftPlugins"
 
-include("ShearFrames", "FlatSigns", "VillagerTrades", "TreeChop", "LocatorColor")
+include("ShearFrames", "FlatSigns", "VillagerTrades", "TreeChop", "LocatorColor", "TraderPost")
