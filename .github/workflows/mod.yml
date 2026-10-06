@@ -1,0 +1,51 @@
+name: Build Fabric mod
+
+on:
+  push:
+    paths: ["BreedingIndicator/**", ".github/workflows/mod.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: BreedingIndicator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+
+      - name: Resolve Fabric versions for 26.1.2
+        run: |
+          LOADER=$(curl -s https://meta.fabricmc.net/v2/versions/loader | jq -r '.[0].version')
+          API=$(curl -s https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml | grep -o '<version>[^<]*+26.1.2</version>' | tail -1 | sed 's/<[^>]*>//g')
+          LOOM=$(curl -s https://maven.fabricmc.net/net/fabricmc/fabric-loom/net.fabricmc.fabric-loom.gradle.plugin/maven-metadata.xml | grep -o '<version>[^<]*</version>' | tail -5 | sed 's/<[^>]*>//g' | tr '\n' ' ')
+          echo "loader=$LOADER api=$API loom-candidates=$LOOM"
+          echo "PROPS=-Ploader_version=$LOADER -Pfabric_version=$API" >> $GITHUB_ENV
+
+      - name: Build
+        run: gradle build --no-daemon --stacktrace $PROPS
+
+      - name: Probe Minecraft classes
+        if: always()
+        run: |
+          JAR=$(find ~/.gradle .gradle -name 'minecraft-*client*.jar' -o -name 'minecraft-merged*.jar' -o -name 'minecraft-common*.jar' 2>/dev/null | grep -v sources | head -3)
+          echo "$JAR"
+          for j in $JAR; do
+            for c in net.minecraft.client.Minecraft net.minecraft.world.entity.AgeableMob net.minecraft.world.entity.animal.Animal net.minecraft.world.entity.Entity; do
+              javap -cp "$j" -p "$c" 2>/dev/null | grep -Ei 'glow|teamcolor|getAge|handleEntityEvent|isBaby|inLove|outline' || true
+            done
+          done
+          ls ~/.gradle/caches/fabric-loom 2>/dev/null | head; find ~/.gradle/caches -path '*fabric-api*' -name '*rendering*' 2>/dev/null | head -5
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: BreedingIndicator
+          path: BreedingIndicator/build/libs/BreedingIndicator-*.jar

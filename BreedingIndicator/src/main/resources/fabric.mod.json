@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "breedingindicator",
+  "version": "${version}",
+  "name": "Breeding Indicator",
+  "description": "Красный ! над животными с перезарядкой размножения и подсветка готовых к размножению.",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.iva.breeding.BreedingIndicatorClient"]
+  },
+  "mixins": ["breedingindicator.mixins.json"],
+  "depends": {
+    "fabricloader": "*",
+    "fabric-api": "*",
+    "minecraft": "~26.1"
+  }
+}
