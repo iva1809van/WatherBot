@@ -8,6 +8,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.VillagerAcquireTradeEvent;
+import org.bukkit.event.entity.VillagerReplenishTradeEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantInventory;
@@ -23,6 +24,7 @@ import java.util.List;
  * У жителей каждый трейд доступен 64 раза, но не блокируется:
  * после каждых 64 сделок цена (первый предмет оплаты) растёт на 25%
  * от предыдущей: 32 -> 40 -> 50 -> 63 -> 64 (больше стака быть не может).
+ * Когда житель пополняет запасы (как в ванили), цена опускается на один шаг.
  */
 public final class VillagerTradesPlugin extends JavaPlugin implements Listener {
 
@@ -88,9 +90,27 @@ public final class VillagerTradesPlugin extends JavaPlugin implements Listener {
         });
     }
 
+    /** Житель пополняет запасы — цена этого трейда снижается на один шаг. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onReplenish(VillagerReplenishTradeEvent event) {
+        if (!(event.getEntity() instanceof Villager villager)) return;
+        int index = findRecipe(villager, event.getRecipe());
+        if (index < 0) return;
+        // Сброс использований выполняет игра после события — применяем на следующем тике
+        getServer().getScheduler().runTask(this, () -> {
+            if (!villager.isValid() || index >= villager.getRecipeCount()) return;
+            PersistentDataContainer pdc = villager.getPersistentDataContainer();
+            int tier = pdc.getOrDefault(key("tier", index), PersistentDataType.INTEGER, 0);
+            pdc.set(key("tier", index), PersistentDataType.INTEGER, Math.max(0, tier - 1));
+            pdc.set(key("count", index), PersistentDataType.INTEGER, 0);
+            applyPrice(villager, index);
+        });
+    }
+
     /**
-     * Пересобирает трейд: лимит 64, использование сбрасывается (трейд никогда
-     * не блокируется), цена = базовая * 1.25^уровень.
+     * Пересобирает трейд: лимит 64, использования = счётчик сделок текущего
+     * шага (чтобы житель понимал, что ему пора пополнить запасы), трейд никогда
+     * не блокируется, цена = базовая * 1.25^уровень, ванильный спрос отключён.
      */
     private void applyPrice(Villager villager, int index) {
         MerchantRecipe old = villager.getRecipe(index);
@@ -110,10 +130,11 @@ public final class VillagerTradesPlugin extends JavaPlugin implements Listener {
         first.setAmount(Math.max(1, Math.min(price, first.getMaxStackSize())));
         ingredients.set(0, first);
 
+        int count = pdc.getOrDefault(key("count", index), PersistentDataType.INTEGER, 0);
         MerchantRecipe updated = new MerchantRecipe(
-                old.getResult(), 0, TRADES_PER_TIER, old.hasExperienceReward(),
+                old.getResult(), Math.min(count, TRADES_PER_TIER - 1), TRADES_PER_TIER, old.hasExperienceReward(),
                 old.getVillagerExperience(), old.getPriceMultiplier(),
-                old.getDemand(), old.getSpecialPrice());
+                0, old.getSpecialPrice());
         updated.setIngredients(ingredients);
         villager.setRecipe(index, updated);
     }
