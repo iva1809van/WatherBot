@@ -52,10 +52,10 @@ public class BreedingIndicatorClient implements ClientModInitializer {
         while (toggleKey.consumeClick()) {
             highlightEnabled = !highlightEnabled;
             if (mc.player != null) {
-                mc.player.displayClientMessage(Component.literal(highlightEnabled
+                mc.gui.setOverlayMessage(Component.literal(highlightEnabled
                         ? "Подсветка готовых к размножению: ВКЛ"
                         : "Подсветка готовых к размножению: ВЫКЛ")
-                        .withStyle(highlightEnabled ? ChatFormatting.GREEN : ChatFormatting.GRAY), true);
+                        .withStyle(highlightEnabled ? ChatFormatting.GREEN : ChatFormatting.GRAY), false);
             }
         }
         if (mc.level == null || mc.player == null) {

@@ -31,19 +31,7 @@ jobs:
           echo "PROPS=-Ploader_version=$LOADER -Pfabric_version=$API" >> $GITHUB_ENV
 
       - name: Build
-        run: gradle build --no-daemon --stacktrace $PROPS
-
-      - name: Probe Minecraft classes
-        if: always()
-        run: |
-          J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
-          echo "=====PROBE====="
-          for c in net.minecraft.client.renderer.entity.EntityRenderer net.minecraft.client.renderer.entity.state.EntityRenderState net.minecraft.client.KeyMapping 'net.minecraft.client.KeyMapping$Category' net.minecraft.world.level.ClipContext; do
-            echo "## $c"; javap -cp "$J" -p "$c" 2>&1 | grep -Ev 'lambda\$|^Compiled' | head -60
-          done
-          unzip -l "$J" | grep -Eo 'net/minecraft/resources/[A-Za-z]+\.class' | head
-          for f in $(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -name '*.jar' | grep -E 'key-mapping|keybind|lifecycle-events|events-interaction|networking' ); do echo "## $f"; unzip -l "$f" | grep -Eo 'net/fabricmc/fabric/api/client/[^ ]*\.class' | grep -v impl | head -20; done
-          echo "=====END====="
+        run: gradle build --no-daemon $PROPS
 
       - uses: actions/upload-artifact@v4
         if: success()
