@@ -36,9 +36,29 @@ public final class BreedingTracker {
         inLove.put(animal.getUUID(), now());
     }
 
-    /** Вызывается, когда на клиенте появляется новая сущность. */
+    /**
+     * Новые сущности: флаг «детёныш» приходит отдельным пакетом уже после
+     * появления сущности, поэтому проверяем их несколько тиков подряд.
+     */
+    private static final Map<Animal, Long> recentlyLoaded = new java.util.IdentityHashMap<>();
+    private static final long BABY_CHECK_TICKS = 40;
+
     public static void onEntityLoad(Entity entity) {
-        if (!(entity instanceof Animal baby) || !baby.isBaby()) return;
+        if (entity instanceof Animal a) recentlyLoaded.put(a, now());
+    }
+
+    /** Вызывается каждый тик клиента. */
+    public static void tick() {
+        long t = now();
+        for (Iterator<Map.Entry<Animal, Long>> it = recentlyLoaded.entrySet().iterator(); it.hasNext(); ) {
+            var e = it.next();
+            Animal a = e.getKey();
+            if (a.isRemoved() || t - e.getValue() > BABY_CHECK_TICKS) { it.remove(); continue; }
+            if (a.isBaby()) { it.remove(); onBabySeen(a); }
+        }
+    }
+
+    private static void onBabySeen(Animal baby) {
         long t = now();
         var level = baby.level();
         for (Animal parent : level.getEntitiesOfClass(Animal.class, baby.getBoundingBox().inflate(6))) {
@@ -49,6 +69,17 @@ public final class BreedingTracker {
             inLove.remove(parent.getUUID());
             cooldownUntil.put(parent.getUUID(), t + COOLDOWN_TICKS);
         }
+    }
+
+    /** Животное недавно покормили (сердечки) — повторно кормить не нужно. */
+    public static boolean inLove(Entity entity) {
+        Long at = inLove.get(entity.getUUID());
+        return at != null && now() - at < 600;
+    }
+
+    /** Помечаем сразу после кормления, не дожидаясь ответа сервера. */
+    public static void markFed(Animal animal) {
+        inLove.put(animal.getUUID(), now());
     }
 
     public static boolean onCooldown(Entity entity) {
@@ -68,5 +99,6 @@ public final class BreedingTracker {
     public static void reset() {
         inLove.clear();
         cooldownUntil.clear();
+        recentlyLoaded.clear();
     }
 }

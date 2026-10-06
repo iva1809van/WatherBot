@@ -33,17 +33,6 @@ jobs:
       - name: Build
         run: gradle build --no-daemon $PROPS
 
-      - name: Probe
-        if: always()
-        run: |
-          J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
-          echo "=====PROBE====="
-          javap -cp "$J" -p net.minecraft.client.multiplayer.MultiPlayerGameMode | grep -i interact
-          javap -cp "$J" -p net.minecraft.world.entity.player.Player | grep -Ei 'interactwith|interactionrange'
-          javap -cp "$J" -p net.minecraft.world.entity.animal.Animal | grep -Ei 'isfood|canFallInLove'
-          javap -cp "$J" -p net.minecraft.world.InteractionHand | grep -i hand
-          echo "=====END====="
-
       - uses: actions/upload-artifact@v4
         if: success()
         with:
