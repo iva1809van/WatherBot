@@ -1,0 +1,79 @@
+<title>Minecraft Dialog Preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<style>
+/* Layout: one game "screen" — blurred world behind, centered vanilla-style dialog, captions under it */
+:root{
+  --sky:#6f9bd8; --world:#3d6b2f; --dim:rgba(0,0,0,.55);
+  --text:#ffffff; --muted:#a8a8a8; --title:#ffffff;
+  --btn:#6d6d6d; --btn-hi:#a0a0a0; --btn-lo:#2b2b2b; --btn-hover:#7e8cc7;
+  --field:#000000; --field-edge:#a0a0a0; --accent:#55ff55; --gold:#ffaa00;
+  --page:#141414; --caption:#cfcfcf;
+  --mc:"VT323", "Courier New", monospace;
+  color-scheme:dark;
+}
+body{background:var(--page);color:var(--text);font-family:var(--mc);padding-block:24px;padding-inline:16px;display:flex;flex-direction:column;align-items:center;gap:16px}
+.screen{width:100%;max-width:760px;aspect-ratio:16/10;position:relative;overflow:hidden;border:2px solid #000;
+  background:linear-gradient(var(--sky) 0 45%, var(--world) 45% 100%);image-rendering:pixelated}
+.screen::before{content:"";position:absolute;inset:0;background:
+  repeating-linear-gradient(90deg,rgba(0,0,0,.08) 0 24px,transparent 24px 48px),
+  repeating-linear-gradient(0deg,rgba(0,0,0,.06) 0 24px,transparent 24px 48px);filter:blur(1px)}
+.screen::after{content:"";position:absolute;inset:0;background:var(--dim)}
+.dialog{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 16px;overflow:auto}
+h1{font-size:28px;font-weight:400;color:var(--title);text-shadow:2px 2px 0 #3f3f3f;margin:4px 0 2px}
+.body{max-width:46ch;text-align:center;font-size:20px;line-height:1.15;color:var(--text);text-shadow:2px 2px 0 #3f3f3f}
+.body b{color:var(--gold);font-weight:400}
+.label{font-size:19px;color:var(--muted);text-shadow:2px 2px 0 #2a2a2a;align-self:center;width:min(300px,100%)}
+input[type=text]{width:min(300px,100%);height:30px;background:var(--field);color:var(--text);border:2px solid var(--field-edge);font:inherit;font-size:20px;padding:0 6px}
+input[type=text]:focus{outline:none;border-color:#fff}
+.mcbtn{width:min(300px,100%);height:32px;font:inherit;font-size:21px;color:var(--text);text-shadow:2px 2px 0 #3f3f3f;cursor:pointer;
+  background:var(--btn);border:2px solid #000;box-shadow:inset 2px 2px 0 var(--btn-hi),inset -2px -3px 0 var(--btn-lo)}
+.mcbtn:hover,.mcbtn:focus-visible{background:var(--btn-hover);outline:2px solid #fff;outline-offset:-2px}
+.slider{position:relative;width:min(300px,100%);height:32px;background:var(--btn-lo);border:2px solid #000;display:grid;place-items:center;font-size:21px;text-shadow:2px 2px 0 #3f3f3f}
+.slider input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.knob{position:absolute;top:0;bottom:0;width:12px;background:var(--btn);box-shadow:inset 2px 2px 0 var(--btn-hi),inset -2px -2px 0 var(--btn-lo);pointer-events:none}
+.slider span{position:relative;pointer-events:none}
+.row{display:flex;gap:8px;width:min(300px,100%)}
+.row .mcbtn{flex:1;min-width:0}
+.toast{position:absolute;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);font-size:20px;color:var(--accent);text-shadow:2px 2px 0 #153f15}
+.caption{max-width:760px;width:100%;font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--caption)}
+.caption code{font-family:ui-monospace,monospace;color:var(--gold)}
+@media (max-width:520px){.screen{aspect-ratio:auto;min-height:520px}}
+</style>
+
+<div class="screen" role="img" aria-label="Пример диалогового окна Minecraft">
+  <div class="dialog">
+    <h1>Торговля с жителем</h1>
+    <p class="body">Цена трейда <b>«32 палки → 1 изумруд»</b> выросла до <b>50</b>. Сбросить её можно за 5 изумрудов.</p>
+
+    <label class="label" for="note">Комментарий</label>
+    <input id="note" type="text" value="Фермер у реки">
+
+    <button class="mcbtn" id="toggle" type="button">Уведомлять о росте цены: ВКЛ</button>
+
+    <div class="slider">
+      <input id="step" type="range" min="5" max="50" step="5" value="25" aria-label="Шаг цены">
+      <div class="knob" id="knob"></div>
+      <span id="steplabel">Шаг цены: 25%</span>
+    </div>
+
+    <div class="row">
+      <button class="mcbtn" id="ok" type="button">Сбросить цену</button>
+      <button class="mcbtn" id="cancel" type="button">Отмена</button>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<p class="caption">Так выглядит диалог (Dialog), который сервер может открыть игроку без модов. Он рисуется клиентом в ванильном стиле. Плагин задаёт заголовок, текст, поле ввода (<code>text</code>), переключатель (<code>boolean</code>), ползунок (<code>number_range</code>) и кнопки (<code>action</code>), а нажатие приходит обратно на сервер. Элементы здесь кликабельны, но это только макет.</p>
+
+<script>
+const $=id=>document.getElementById(id);
+let on=true;
+$('toggle').onclick=()=>{on=!on;$('toggle').textContent='Уведомлять о росте цены: '+(on?'ВКЛ':'ВЫКЛ')};
+function slide(){const s=$('step'),p=(s.value-s.min)/(s.max-s.min);
+  $('knob').style.left='calc('+(p*100)+'% - '+(p*12)+'px)';$('steplabel').textContent='Шаг цены: '+s.value+'%'}
+$('step').oninput=slide;slide();
+function toast(t){$('toast').textContent=t;$('toast').hidden=false;clearTimeout(window._t);window._t=setTimeout(()=>$('toast').hidden=true,1800)}
+$('ok').onclick=()=>toast('Цена сброшена до 32');
+$('cancel').onclick=()=>toast('Окно закрыто');
+</script>
