@@ -1,0 +1,9 @@
+name: InvisibleFrames
+version: '${version}'
+main: com.iva.invisibleframes.InvisibleFramesPlugin
+api-version: '26.1'
+description: Shift + ПКМ ножницами по рамке делает её невидимой (и обратно).
+permissions:
+  invisibleframes.use:
+    description: Позволяет делать рамки невидимыми ножницами
+    default: true
