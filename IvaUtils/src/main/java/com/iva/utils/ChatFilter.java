@@ -41,7 +41,12 @@ final class ChatFilter {
 
         ClientReceiveMessageEvents.ALLOW_CHAT.register((message, signed, sender, params, time) -> allow(message));
         ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> overlay || allow(message));
-        ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, time) -> ping(message));
+        ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, time) -> {
+            Minecraft mc = Minecraft.getInstance();
+            // Своё сообщение — не подсвечиваем
+            if (sender != null && mc.player != null && mc.player.getUUID().equals(sender.id())) return;
+            ping(message);
+        });
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> { if (!overlay) ping(message); });
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(
@@ -80,6 +85,7 @@ final class ChatFilter {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         String lower = message.getString().toLowerCase(Locale.ROOT);
+        if (isOwn(lower, mc.player.getName().getString().toLowerCase(Locale.ROOT))) return;
         boolean hit = config.pingOnName && lower.contains(mc.player.getName().getString().toLowerCase(Locale.ROOT));
         for (String w : config.highlight) {
             if (!w.isBlank() && lower.contains(w.toLowerCase(Locale.ROOT))) hit = true;
@@ -87,6 +93,15 @@ final class ChatFilter {
         if (!hit) return;
         mc.player.playSound(SoundEvents.EXPERIENCE_ORB_PICKUP, 0.7f, 1.4f);
         mc.gui.setOverlayMessage(Component.literal("✉ ").withStyle(ChatFormatting.GOLD).append(message.copy()), false);
+    }
+
+    /**
+     * Сервер с плагином чата присылает сообщения игроков как системные,
+     * поэтому своё узнаём по формату: ник в начале строки перед «>», «:» или «»».
+     */
+    private static boolean isOwn(String lower, String name) {
+        return java.util.regex.Pattern.compile("^.{0,24}?(?<![a-z0-9_])" + java.util.regex.Pattern.quote(name)
+                + "(?![a-z0-9_])\\s*[>:»\\]|]").matcher(lower).find();
     }
 
     private static int edit(List<String> list, String word, boolean add) {
