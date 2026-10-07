@@ -2,4 +2,4 @@ name: VillagerTrades
 version: '${version}'
 main: com.iva.villagertrades.VillagerTradesPlugin
 api-version: '26.1'
-description: 64 сделки на трейд, затем цена растёт на 25% за каждые следующие 64 сделки.
+description: "64 сделки на трейд, затем цена растёт на 25% за каждые следующие 64 сделки."

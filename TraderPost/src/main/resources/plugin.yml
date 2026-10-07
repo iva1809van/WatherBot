@@ -2,7 +2,7 @@ name: TraderPost
 version: '${version}'
 main: com.iva.traderpost.TraderPostPlugin
 api-version: '26.1'
-description: Бочка-пост странствующего торговца: визиты раз в 5 дней, смена трейдов каждые полдня.
+description: "Бочка-пост странствующего торговца: визиты раз в 5 дней, смена трейдов каждые полдня."
 permissions:
   traderpost.use:
     default: true

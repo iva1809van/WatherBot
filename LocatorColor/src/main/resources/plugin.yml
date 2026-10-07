@@ -2,7 +2,7 @@ name: LocatorColor
 version: '${version}'
 main: com.iva.locatorcolor.LocatorColorPlugin
 api-version: '26.1'
-description: Shift + ПКМ в воздух компасом «Локатор» — выбор цвета точки на панели локатора.
+description: "Shift + ПКМ в воздух компасом «Локатор» — выбор цвета точки на панели локатора."
 permissions:
   locatorcolor.use:
     default: true

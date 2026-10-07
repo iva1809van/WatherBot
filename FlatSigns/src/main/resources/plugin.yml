@@ -2,7 +2,7 @@ name: FlatSigns
 version: '${version}'
 main: com.iva.flatsigns.FlatSignsPlugin
 api-version: '26.1'
-description: Shift + ПКМ табличкой по полу или потолку кладёт табличку плашмя.
+description: "Shift + ПКМ табличкой по полу или потолку кладёт табличку плашмя."
 permissions:
   flatsigns.use:
     default: true
