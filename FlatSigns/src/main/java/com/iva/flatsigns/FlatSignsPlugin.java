@@ -58,7 +58,15 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
     /** Временные таблички, ожидающие ввода текста: игрок -> данные. */
     private final Map<UUID, Pending> pending = new HashMap<>();
 
-    private record Pending(Block block, Material signType, boolean ceiling, float yaw) {}
+    /**
+     * block — временная табличка для ввода текста; anchor — блок, где появится табличка;
+     * wall — сторона стены (null для пола/потолка).
+     */
+    private record Pending(Block block, Material signType, boolean ceiling, float yaw, Block anchor, BlockFace wall) {
+        Pending(Block block, Material signType, boolean ceiling, float yaw) {
+            this(block, signType, ceiling, yaw, block, null);
+        }
+    }
 
     @Override
     public void onEnable() {
@@ -77,13 +85,15 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
     public void onPlace(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getHand() != EquipmentSlot.HAND) return;
         Player player = event.getPlayer();
-        if (!player.isSneaking() || !player.hasPermission("flatsigns.use")) return;
+        if (!player.hasPermission("flatsigns.use")) return;
 
         ItemStack hand = player.getInventory().getItemInMainHand();
         // Только обычные таблички (подвесные не трогаем)
         if (!Tag.ITEMS_SIGNS.isTagged(hand.getType())) return;
 
         BlockFace face = event.getBlockFace();
+        if (tryWallSign(event, player, hand, face)) return;
+        if (!player.isSneaking()) return;
         if (face != BlockFace.UP && face != BlockFace.DOWN) return;
         Block clicked = event.getClickedBlock();
         if (clicked == null) return;
@@ -118,6 +128,106 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         }, 20L * 120);
     }
 
+    /**
+     * Табличка на стене там, где обычная не встанет: в блоке уже стоит табличка
+     * (угол — несколько табличек в одном блоке, как рамки) или факел и т.п.
+     */
+    private boolean tryWallSign(PlayerInteractEvent event, Player player, ItemStack hand, BlockFace face) {
+        if (face != BlockFace.NORTH && face != BlockFace.SOUTH && face != BlockFace.EAST && face != BlockFace.WEST) return false;
+        Block clicked = event.getClickedBlock();
+        if (clicked == null || !clicked.getType().isSolid()) return false;
+        Block target = clicked.getRelative(face);
+        Material t = target.getType();
+        boolean occupied = !t.isAir() && (target.isPassable() || Tag.ALL_SIGNS.isTagged(t));
+        if (!occupied) return false; // свободно — пусть игра поставит обычную табличку
+        if (pending.containsKey(player.getUniqueId())) return true;
+
+        // Для окна ввода текста нужна временная настоящая табличка — ставим её в свободный блок у игрока
+        Block edit = null;
+        Block feet = player.getLocation().getBlock();
+        for (Block b : new Block[]{feet.getRelative(0, 2, 0), feet.getRelative(0, 1, 0), feet}) {
+            if (b.getType().isAir()) { edit = b; break; }
+        }
+        if (edit == null) return false;
+        event.setCancelled(true);
+
+        Material signType = hand.getType();
+        edit.setType(signType, false);
+        if (!(edit.getState() instanceof Sign)) {
+            edit.setType(Material.AIR, false);
+            return true;
+        }
+        float yaw = switch (face) {
+            case SOUTH -> 0f; case WEST -> 90f; case NORTH -> 180f; default -> -90f;
+        };
+        final Block editBlock = edit;
+        pending.put(player.getUniqueId(), new Pending(edit, signType, false, yaw, target, face));
+        getServer().getScheduler().runTask(this, () -> {
+            if (editBlock.getState() instanceof Sign s) player.openSign(s, Side.FRONT);
+        });
+        getServer().getScheduler().runTaskLater(this, () -> {
+            Pending p = pending.get(player.getUniqueId());
+            if (p != null && p.block().equals(editBlock)) {
+                pending.remove(player.getUniqueId());
+                editBlock.setType(Material.AIR, false);
+            }
+        }, 20L * 120);
+        return true;
+    }
+
+    /** Настенная табличка из display-сущностей, прижатая к стороне блока. */
+    private void spawnWallSign(Pending p, List<Component> lines) {
+        Block b = p.anchor();
+        String group = UUID.randomUUID().toString();
+        Location base = b.getLocation().add(0.5, 0.5, 0.5);
+        base.setYaw(p.yaw());
+        base.setPitch(0);
+
+        Material planks = Material.matchMaterial(p.signType().name().replace("_SIGN", "_PLANKS"));
+        if (planks == null || !planks.isBlock()) planks = Material.OAK_PLANKS;
+        final Material planksType = planks;
+        // Локальная ось +Z смотрит от стены наружу; стена — на z = -0.5
+        b.getWorld().spawn(base, BlockDisplay.class, d -> {
+            d.setBlock(planksType.createBlockData());
+            d.setTransformation(new Transformation(
+                    new Vector3f(-0.5f, -0.25f, -0.5f),
+                    new AxisAngle4f(),
+                    new Vector3f(1f, 0.5f, THICKNESS),
+                    new AxisAngle4f()));
+            tag(d.getPersistentDataContainer(), group, null);
+        });
+
+        Component text = Component.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) text = text.append(Component.newline());
+            text = text.append(lines.get(i));
+        }
+        final Component content = text.colorIfAbsent(NamedTextColor.BLACK);
+        b.getWorld().spawn(base, TextDisplay.class, t -> {
+            t.text(content);
+            t.setBillboard(Display.Billboard.FIXED);
+            t.setDefaultBackground(false);
+            t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+            t.setShadowed(false);
+            t.setTransformation(new Transformation(
+                    new Vector3f(0f, -TEXT_SCALE / 2f, -0.5f + THICKNESS + 0.003f),
+                    new AxisAngle4f(),
+                    new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
+                    new AxisAngle4f()));
+            tag(t.getPersistentDataContainer(), group, null);
+        });
+
+        // Хитбокс у стены
+        BlockFace f = p.wall();
+        Location hit = b.getLocation().add(0.5 - f.getModX() * 0.4, 0.25, 0.5 - f.getModZ() * 0.4);
+        b.getWorld().spawn(hit, Interaction.class, i -> {
+            i.setInteractionWidth(0.25f);
+            i.setInteractionHeight(0.5f);
+            i.setResponsive(true);
+            tag(i.getPersistentDataContainer(), group, p.signType().name());
+        });
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onSignEdit(SignChangeEvent event) {
         Player player = event.getPlayer();
@@ -136,8 +246,9 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
             hand.setAmount(hand.getAmount() - 1);
         }
 
-        spawnFlatSign(p, lines);
-        p.block().getWorld().playSound(p.block().getLocation(), Sound.BLOCK_WOOD_PLACE, 1f, 1f);
+        if (p.wall() != null) spawnWallSign(p, lines);
+        else spawnFlatSign(p, lines);
+        p.anchor().getWorld().playSound(p.anchor().getLocation(), Sound.BLOCK_WOOD_PLACE, 1f, 1f);
     }
 
     @EventHandler
