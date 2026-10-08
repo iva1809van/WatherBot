@@ -16,6 +16,7 @@ public abstract class CameraMixin {
         Camera self = (Camera) (Object) this;
         if (self.entity() != Minecraft.getInstance().player || !Aero.active(Minecraft.getInstance().player)) return;
         if (Aero.roll == 0) return;
-        self.rotation().rotateZ((float) Math.toRadians(Aero.roll));
+        // +крен (правое крыло вниз) = поворот камеры по часовой вокруг взгляда
+        self.rotation().rotateZ((float) Math.toRadians(-Aero.roll * Aero.CAMERA_SIGN));
     }
 }

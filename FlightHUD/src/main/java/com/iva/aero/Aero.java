@@ -18,6 +18,9 @@ public final class Aero {
     /** Скорость разворота при крене 90°, градусов курса за тик. */
     public static final double BANK_TURN_RATE = 3.5;
 
+    /** 1 или -1: направление наклона камеры (на случай, если окажется зеркальным). */
+    public static final int CAMERA_SIGN = 1;
+
     public static boolean enabled = true;
     /** Текущий крен в градусах, + = правое крыло вниз. */
     public static double roll;
@@ -107,7 +110,7 @@ public final class Aero {
     }
 
     /** Каждый тик: разворот от крена, руль направления, выравнивание после посадки. */
-    static void tick(Minecraft mc) {
+    public static void tick(Minecraft mc) {
         LocalPlayer p = mc.player;
         if (!active(p)) {
             roll = 0;

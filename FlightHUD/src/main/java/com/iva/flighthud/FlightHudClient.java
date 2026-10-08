@@ -26,10 +26,25 @@ public class FlightHudClient implements ClientModInitializer {
                 "key.flighthud.toggle", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_U, category));
         KeyMapping mode = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.flighthud.mode", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_I, category));
+        KeyMapping aeroKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.flighthud.aero", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, category));
+        KeyMapping levelKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.flighthud.level", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_X, category));
         hideVanillaElements();
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             while (toggle.consumeClick()) enabled = !enabled;
             while (mode.consumeClick()) droneMode = !droneMode;
+            while (aeroKey.consumeClick()) {
+                com.iva.aero.Aero.enabled = !com.iva.aero.Aero.enabled;
+                mc.gui.setOverlayMessage(net.minecraft.network.chat.Component.literal(
+                        "Управление самолётом: " + (com.iva.aero.Aero.enabled ? "ВКЛ" : "ВЫКЛ")), false);
+            }
+            // Удерживание X плавно выравнивает крылья
+            if (levelKey.isDown() && com.iva.aero.Aero.active(mc.player)) {
+                double step = Math.max(-8, Math.min(8, -com.iva.aero.Aero.roll));
+                com.iva.aero.Aero.rotate(mc.player, 0, step, 0);
+            }
+            com.iva.aero.Aero.tick(mc);
             FlightData.tick(mc);
         });
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath("flighthud", "overlay"), FlightHud::renderOverlay);

@@ -93,32 +93,90 @@ final class FlightHud {
         }
     }
 
+    /** Крен в радианах для поворота символики (0, если управление самолётом выключено). */
+    private static double rollRad() {
+        return com.iva.aero.Aero.active(Minecraft.getInstance().player) ? Math.toRadians(com.iva.aero.Aero.roll) : 0;
+    }
+
+    /**
+     * Поворот смещения (dx, dy) от центра экрана вместе с горизонтом.
+     * Правый крен — горизонт на экране поворачивается против часовой.
+     */
+    private static int[] rotate(int cx, int cy, double dx, double dy, double a) {
+        double c = Math.cos(a), s = Math.sin(a);
+        return new int[]{(int) Math.round(cx + dx * c + dy * s), (int) Math.round(cy - dx * s + dy * c)};
+    }
+
+    /** Линия под любым углом (точками по 1 пикселю). */
+    private static void line(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int c) {
+        if (y1 == y2) { hLine(g, x1, x2, y1, c); return; }
+        if (x1 == x2) { vLine(g, x1, y1, y2, c); return; }
+        int n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+        for (int i = 0; i <= n; i++) {
+            int x = x1 + (x2 - x1) * i / n, y = y1 + (y2 - y1) * i / n;
+            g.fill(x, y, x + 1, y + 1, c);
+        }
+    }
+
+    private static void rLine(GuiGraphicsExtractor g, int cx, int cy, double x1, double y1, double x2, double y2, double a, int c) {
+        int[] p = rotate(cx, cy, x1, y1, a), q = rotate(cx, cy, x2, y2, a);
+        line(g, p[0], p[1], q[0], q[1], c);
+    }
+
     // ---------- элементы ----------
 
-    /** Шкала тангажа: линии каждые 10°, ниже горизонта — пунктиром. */
+    /** Шкала тангажа: линии каждые 10°, ниже горизонта — пунктиром. Наклоняется вместе с креном. */
     private static void pitchLadder(GuiGraphicsExtractor g, Font font, int cx, int cy, float pitch, double ppd, int h) {
+        double a = rollRad();
         for (int deg = -90; deg <= 90; deg += 10) {
             // В MC взгляд вверх — отрицательный pitch
-            int y = (int) Math.round(cy - (deg + pitch) * ppd);
-            if (y < h * 0.18 || y > h * 0.82) continue;
+            double y = -(deg + pitch) * ppd;
+            if (Math.abs(y) > h * 0.32) continue;
             int half = deg == 0 ? 70 : 34;
             int gap = 18;
             int c = deg == 0 ? main() : dim();
             if (deg >= 0) {
-                hLine(g, cx - half, cx - gap, y, c);
-                hLine(g, cx + gap, cx + half, y, c);
+                rLine(g, cx, cy, -half, y, -gap, y, a, c);
+                rLine(g, cx, cy, gap, y, half, y, a, c);
             } else {
-                for (int x = cx - half; x < cx - gap; x += 6) hLine(g, x, Math.min(x + 3, cx - gap), y, c);
-                for (int x = cx + gap; x < cx + half; x += 6) hLine(g, x, Math.min(x + 3, cx + half), y, c);
+                for (int x = -half; x < -gap; x += 6) rLine(g, cx, cy, x, y, Math.min(x + 3, -gap), y, a, c);
+                for (int x = gap; x < half; x += 6) rLine(g, cx, cy, x, y, Math.min(x + 3, half), y, a, c);
             }
             if (deg != 0) {
-                vLine(g, cx - half, y, y + (deg > 0 ? 3 : -3), c);
-                vLine(g, cx + half, y, y + (deg > 0 ? 3 : -3), c);
+                double tick = deg > 0 ? 3 : -3;
+                rLine(g, cx, cy, -half, y, -half, y + tick, a, c);
+                rLine(g, cx, cy, half, y, half, y + tick, a, c);
                 String label = String.valueOf(Math.abs(deg));
-                g.text(font, label, cx - half - 4 - font.width(label), y - 4, c, false);
-                g.text(font, label, cx + half + 4, y - 4, c, false);
+                int[] l = rotate(cx, cy, -half - 4 - font.width(label) / 2.0, y, a);
+                int[] r = rotate(cx, cy, half + 4 + font.width(label) / 2.0, y, a);
+                g.centeredText(font, label, l[0], l[1] - 4, c);
+                g.centeredText(font, label, r[0], r[1] - 4, c);
             }
         }
+        bankIndicator(g, font, cx, cy, h);
+    }
+
+    /** Шкала крена: дуга с отметками 0/10/20/30/45/60° и указатель. */
+    private static void bankIndicator(GuiGraphicsExtractor g, Font font, int cx, int cy, int h) {
+        if (!com.iva.aero.Aero.active(Minecraft.getInstance().player)) return;
+        int r = (int) (h * 0.30);
+        int[] marks = {-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60};
+        for (int m : marks) {
+            double t = Math.toRadians(m);
+            int len = (m % 30 == 0) ? 6 : 3;
+            int x1 = (int) Math.round(cx + Math.sin(t) * r), y1 = (int) Math.round(cy + 0 - Math.cos(t) * r) + 0;
+            int x2 = (int) Math.round(cx + Math.sin(t) * (r + len)), y2 = (int) Math.round(cy - Math.cos(t) * (r + len));
+            // дуга снизу экрана (как в кабине — указатель «небо» сверху), рисуем сверху центра
+            line(g, x1, y1, x2, y2, dim());
+        }
+        double roll = com.iva.aero.Aero.roll;
+        double t = Math.toRadians(Mth.clamp(roll, -70, 70));
+        int px = (int) Math.round(cx + Math.sin(t) * (r - 2)), py = (int) Math.round(cy - Math.cos(t) * (r - 2));
+        int c = Math.abs(roll) > 60 ? AMBER : main();
+        line(g, px, py, (int) Math.round(px - Math.sin(t + 0.5) * 6 + Math.sin(t) * 0), (int) Math.round(py + Math.cos(t + 0.5) * 6), c);
+        line(g, px, py, (int) Math.round(px - Math.sin(t - 0.5) * 6), (int) Math.round(py + Math.cos(t - 0.5) * 6), c);
+        String txt = String.format("%s%.0f°", roll > 0.5 ? "R" : roll < -0.5 ? "L" : "", Math.abs(roll));
+        g.centeredText(font, txt, cx, cy - r - 16, c);
     }
 
     /** Рамка камеры дрона: уголки, REC, масштаб. */
@@ -169,8 +227,8 @@ final class FlightHud {
         for (FlightData.Target t : FlightData.targets) {
             double dYaw = Mth.wrapDegrees(t.yaw() - yaw);
             double dPitch = t.pitch() - pitch;
-            int x = (int) Math.round(cx + dYaw * ppd);
-            int y = (int) Math.round(cy + dPitch * ppd);
+            int[] pos = rotate(cx, cy, dYaw * ppd, dPitch * ppd, rollRad());
+            int x = pos[0], y = pos[1];
             boolean onScreen = Math.abs(dYaw) < 80 && x > 20 && x < w - 20 && y > 40 && y < h - 20;
             if (!onScreen) {
                 if (t.label() == null) continue; // за экраном показываем только игроков
@@ -207,8 +265,8 @@ final class FlightHud {
         if (FlightData.speed < 1) return;
         float dYaw = Mth.wrapDegrees(FlightData.velYaw - yaw);
         float dPitch = FlightData.velPitch - pitch;
-        int x = (int) Math.round(cx + dYaw * ppd);
-        int y = (int) Math.round(cy + dPitch * ppd);
+        int[] pos = rotate(cx, cy, dYaw * ppd, dPitch * ppd, rollRad());
+        int x = pos[0], y = pos[1];
         int c = FlightData.impactSeconds >= 0 && FlightData.impactSeconds < 3 ? RED : main();
         box(g, x - 3, y - 3, x + 3, y + 3, c);
         hLine(g, x - 9, x - 4, y, c);

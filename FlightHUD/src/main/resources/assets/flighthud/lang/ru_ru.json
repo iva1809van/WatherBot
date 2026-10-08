@@ -1,5 +1,7 @@
 {
   "key.category.flighthud.main": "Flight HUD",
   "key.flighthud.toggle": "Включить/выключить HUD пилота",
-  "key.flighthud.mode": "Режим: истребитель / дрон"
+  "key.flighthud.mode": "Режим: истребитель / дрон",
+  "key.flighthud.aero": "Управление самолётом вкл/выкл",
+  "key.flighthud.level": "Выровнять крен"
 }
