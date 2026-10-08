@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "flighthud",
+  "version": "${version}",
+  "name": "Flight HUD",
+  "description": "Интерфейс пилота истребителя при полёте на элитрах.",
+  "environment": "client",
+  "entrypoints": { "client": ["com.iva.flighthud.FlightHudClient"] },
+  "depends": { "fabricloader": "*", "fabric-api": "*", "minecraft": "~26.1" }
+}

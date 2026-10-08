@@ -2,7 +2,7 @@ name: Build Fabric mod
 
 on:
   push:
-    paths: ["BreedingIndicator/**", "IvaUtils/**", ".github/workflows/mod.yml"]
+    paths: ["BreedingIndicator/**", "IvaUtils/**", "FlightHUD/**", ".github/workflows/mod.yml"]
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mod: [BreedingIndicator, IvaUtils]
+        mod: [BreedingIndicator, IvaUtils, FlightHUD]
     defaults:
       run:
         working-directory: ${{ matrix.mod }}
