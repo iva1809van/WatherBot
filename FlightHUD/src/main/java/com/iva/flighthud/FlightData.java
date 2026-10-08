@@ -30,7 +30,7 @@ final class FlightData {
     static double vsSmooth;
     static final java.util.List<Target> targets = new java.util.ArrayList<>();
 
-    record Target(double yaw, double pitch, double dist, int color, String label, double w, double h) {}
+    record Target(double yaw, double pitch, double dist, int color, String label, double w, double h, net.minecraft.world.entity.Entity e) {}
 
     /** Фейерверки на момент взлёта — 100% «батареи». */
     static int initialRockets;
@@ -136,7 +136,7 @@ final class FlightData {
             } else {
                 color = 0xFF66FF66;
             }
-            targets.add(new Target(yaw, pitch, dist, color, label, e.getBbWidth(), e.getBbHeight()));
+            targets.add(new Target(yaw, pitch, dist, color, label, e.getBbWidth(), e.getBbHeight(), e));
         }
     }
 

@@ -54,6 +54,7 @@ final class FlightHud {
         float pitch = mc.player.getXRot();
         float yaw = mc.player.getYRot();
         double ppd = h / (double) Math.max(30, mc.options.fov().get()); // пикселей на градус
+        Projector.begin(mc, delta, w, h);
         if (Gunship.active) { GunshipHud.render(g, mc, w, h); return; }
 
         if (FlightHudClient.droneMode) {
@@ -231,26 +232,25 @@ final class FlightHud {
         g.centeredText(font, hdg, cx, top + 16, main());
     }
 
-    /** Отметки мобов и игроков: ромб, дистанция, ник. За краем экрана — стрелка у края. */
+    /** Отметки мобов и игроков: ромб, дистанция, ник. Позиция — точная проекция через камеру. */
     private static void targets(GuiGraphicsExtractor g, Font font, int cx, int cy, float yaw, float pitch, double ppd, int w, int h) {
         for (FlightData.Target t : FlightData.targets) {
-            double dYaw = Mth.wrapDegrees(t.yaw() - yaw);
-            double dPitch = t.pitch() - pitch;
-            int[] pos = rotate(cx, cy, dYaw * ppd, dPitch * ppd, rollRad());
-            int x = pos[0], y = pos[1];
-            boolean onScreen = Math.abs(dYaw) < 80 && x > 20 && x < w - 20 && y > 40 && y < h - 20;
+            if (t.e().isRemoved()) continue;
+            int[] pos = Projector.project(Projector.center(t.e()));
+            boolean onScreen = pos != null && pos[0] > 20 && pos[0] < w - 20 && pos[1] > 40 && pos[1] < h - 20;
             if (!onScreen) {
                 if (t.label() == null) continue; // за экраном показываем только игроков
-                x = Mth.clamp(x, 24, w - 24);
-                y = Mth.clamp(y, 44, h - 24);
-                g.centeredText(font, Math.abs(dYaw) > 90 ? "▼" : "◆", x, y - 4, t.color());
+                double dYaw = Mth.wrapDegrees(t.yaw() - yaw);
+                int x = pos == null ? (dYaw > 0 ? w - 24 : 24) : Mth.clamp(pos[0], 24, w - 24);
+                int y = pos == null ? cy : Mth.clamp(pos[1], 44, h - 24);
+                g.centeredText(font, pos == null ? "▼" : "◆", x, y - 4, t.color());
                 g.centeredText(font, t.label(), x, y + 6, t.color());
                 continue;
             }
-            int r = t.dist() < 20 ? 6 : 4;
+            int x = pos[0], y = pos[1];
+            int r = Math.min(14, Projector.radius(Math.max(t.w(), t.h()), t.dist()) + 2);
             diamond(g, x, y, r, t.color());
-            String d = Math.round(t.dist()) + "м";
-            g.text(font, d, x + r + 3, y - 4, t.color(), false);
+            g.text(font, Math.round(t.dist()) + "м", x + r + 3, y - 4, t.color(), false);
             if (t.label() != null) g.centeredText(font, t.label(), x, y - r - 11, t.color());
         }
     }

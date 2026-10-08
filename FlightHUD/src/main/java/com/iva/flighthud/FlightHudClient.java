@@ -57,6 +57,7 @@ public class FlightHudClient implements ClientModInitializer {
             com.iva.flighthud.aero.Aero.tick(mc);
             FlightData.tick(mc);
             Gunship.tick(mc);
+            HotbarManager.tick(mc);
         });
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath("flighthud", "overlay"), FlightHud::renderOverlay);
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("flighthud", "hud"), FlightHud::render);

@@ -210,19 +210,64 @@ final class GunshipHud {
         g.fill(cx, cy, cx + 1, cy + 1, RED);
     }
 
-    /** Рамки целей вокруг прицела, «LOCK ON» рядом с центром, «TRACK» у захваченной. */
+    /** Параметры снаряда текущего оружия: {скорость блоков/тик, гравитация}. */
+    private static double[] ballistics(Weapon wpn, ItemStack held) {
+        if (wpn == Weapon.GUN105) return new double[]{2.5, 0.05};
+        if (wpn == Weapon.GUN40) {
+            var proj = held.get(net.minecraft.core.component.DataComponents.CHARGED_PROJECTILES);
+            boolean rocket = proj != null && proj.toString().contains("firework");
+            return rocket ? new double[]{1.6, 0.0} : new double[]{3.15, 0.05};
+        }
+        return new double[]{3.0, 0.05};
+    }
+
+    /**
+     * Цели: точная проекция через камеру кадра. Захват — ближайшая к прицелу цель,
+     * чей силуэт накрывает центр экрана. Для захваченной — метка упреждения (куда стрелять).
+     */
     private static void targets(GuiGraphicsExtractor g, Font f, int cx, int cy, float yaw, float pitch, double ppd, int w, int h) {
+        var mc = Minecraft.getInstance();
+        FlightData.Target best = null;
+        double bestOff = Double.MAX_VALUE;
         for (FlightData.Target t : FlightData.targets) {
-            double dy = Mth.wrapDegrees(t.yaw() - yaw), dp = t.pitch() - pitch;
-            int x = (int) Math.round(cx + dy * ppd), y = (int) Math.round(cy + dp * ppd);
+            if (t.e().isRemoved()) continue;
+            int[] pos = Projector.project(Projector.center(t.e()));
+            if (pos == null) continue;
+            int r = Projector.radius(Math.max(t.w(), t.h()), t.dist()) + 3;
+            double off = Math.hypot(pos[0] - cx, pos[1] - cy);
+            if (off <= r + 4 && off < bestOff) { best = t; bestOff = off; }
+        }
+        FlightData.acquired = best;
+
+        Weapon wpn = held(mc.player.getMainHandItem());
+        for (FlightData.Target t : FlightData.targets) {
+            if (t.e().isRemoved()) continue;
+            int[] pos = Projector.project(Projector.center(t.e()));
+            if (pos == null) continue;
+            int x = pos[0], y = pos[1];
             if (x < 20 || x > w - 20 || y < 20 || y > h - 20) continue;
-            int r = (int) Math.max(5, Math.toDegrees(Math.atan2(Math.max(t.w(), t.h()), t.dist())) * ppd / 2 + 3);
-            double off = Math.hypot(dy, dp);
+            int r = Projector.radius(Math.max(t.w(), t.h()), t.dist()) + 3;
+            double off = Math.hypot(x - cx, y - cy);
             int c = t.label() != null ? 0xFF7FD8FF : W;
-            if (t == FlightData.acquired) {
+            if (t == best) {
                 brackets(g, x - r - 4, y - r - 4, x + r + 4, y + r + 4, 5, RED);
                 g.text(f, "TRACK", x - r - 4 - f.width("TRACK") - 2, y + r, RED, false);
-            } else if (off < 6) {
+                g.text(f, Math.round(t.dist()) + "m", x + r + 6, y + r - 4, RED, false);
+                if (wpn != null) {
+                    double[] b = ballistics(wpn, mc.player.getMainHandItem());
+                    int[] lp = Projector.project(Projector.leadPoint(mc.player, t.e(), b[0], b[1]));
+                    if (lp != null) {
+                        // Метка упреждения: ромб + линия от цели
+                        for (int i = 0; i <= 4; i++) {
+                            g.fill(lp[0] - 4 + i, lp[1] - i, lp[0] - 3 + i, lp[1] - i + 1, AMBER);
+                            g.fill(lp[0] + 4 - i, lp[1] - i, lp[0] + 5 - i, lp[1] - i + 1, AMBER);
+                            g.fill(lp[0] - 4 + i, lp[1] + i, lp[0] - 3 + i, lp[1] + i + 1, AMBER);
+                            g.fill(lp[0] + 4 - i, lp[1] + i, lp[0] + 5 - i, lp[1] + i + 1, AMBER);
+                        }
+                        g.text(f, "LEAD", lp[0] + 7, lp[1] - 4, AMBER, false);
+                    }
+                }
+            } else if (off < Math.max(30, r * 3)) {
                 circle(g, x, y, r, c);
                 g.text(f, "LOCK ON", x + r + 4, y - 4, c, false);
             } else {
@@ -235,11 +280,13 @@ final class GunshipHud {
     /** Тепловые пятна: живые существа светятся белым («белый — горячий»). */
     private static void heatBlobs(GuiGraphicsExtractor g, int cx, int cy, float yaw, float pitch, double ppd, int w, int h) {
         for (FlightData.Target t : FlightData.targets) {
-            double dy = Mth.wrapDegrees(t.yaw() - yaw), dp = t.pitch() - pitch;
-            int x = (int) Math.round(cx + dy * ppd), y = (int) Math.round(cy + dp * ppd);
+            if (t.e().isRemoved()) continue;
+            int[] pos = Projector.project(Projector.center(t.e()));
+            if (pos == null) continue;
+            int x = pos[0], y = pos[1];
             if (x < -20 || x > w + 20 || y < -20 || y > h + 20) continue;
-            int hw = (int) Math.max(2, Math.toDegrees(Math.atan2(t.w() / 2, t.dist())) * ppd);
-            int hh = (int) Math.max(2, Math.toDegrees(Math.atan2(t.h() / 2, t.dist())) * ppd);
+            int hw = Projector.radius(t.w(), t.dist());
+            int hh = Projector.radius(t.h(), t.dist());
             g.fill(x - hw - 2, y - hh - 2, x + hw + 2, y + hh + 2, 0x50B0B0B0);
             g.fill(x - hw, y - hh, x + hw, y + hh, 0xC0E0E0E0);
             g.fill(x - hw / 2, y - hh / 2, x + Math.max(1, hw / 2), y + Math.max(1, hh / 2), 0xFFFFFFFF);
