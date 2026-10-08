@@ -3,7 +3,6 @@ package com.iva.flighthud;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -55,6 +54,30 @@ final class HotbarManager {
         lastSlot = sel;
     }
 
+    private static java.lang.reflect.Method clickMethod;
+    private static Object swapType;
+
+    /**
+     * Обмен слота рюкзака со слотом хотбара (как нажатие цифры над предметом).
+     * Тип клика ищем через отражение: в новых версиях класс ClickType переименован.
+     */
+    private static void swap(Minecraft mc, LocalPlayer p, int invSlot, int hotbar) {
+        try {
+            if (clickMethod == null) {
+                for (var m : mc.gameMode.getClass().getMethods()) {
+                    if (m.getName().equals("handleInventoryMouseClick") && m.getParameterCount() == 5 && m.getParameterTypes()[3].isEnum()) {
+                        for (Object c : m.getParameterTypes()[3].getEnumConstants()) {
+                            if (c.toString().equals("SWAP")) { swapType = c; clickMethod = m; }
+                        }
+                    }
+                }
+                if (clickMethod == null) return;
+            }
+            clickMethod.invoke(mc.gameMode, p.inventoryMenu.containerId, invSlot, hotbar, swapType, p);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Переносит по одному нужному предмету за раз из рюкзака в хотбар. */
     private static void arrange(Minecraft mc, LocalPlayer p, Inventory inv, Predicate<ItemStack> allowed) {
         // Какие разные виды уже есть в хотбаре
@@ -71,7 +94,7 @@ final class HotbarManager {
             for (int slot = 0; slot < 9; slot++) {
                 if (allowed.test(inv.getItem(slot))) continue;
                 // В меню инвентаря рюкзак — слоты 9..35, кнопка = номер слота хотбара
-                mc.gameMode.handleInventoryMouseClick(p.inventoryMenu.containerId, i, slot, ClickType.SWAP, p);
+                swap(mc, p, i, slot);
                 cooldown = 2;
                 return;
             }
