@@ -28,7 +28,7 @@ public final class Aero {
     private Aero() {}
 
     public static boolean active(LocalPlayer p) {
-        return enabled && p != null && p.isFallFlying();
+        return enabled && p != null && p.isFallFlying() && !com.iva.flighthud.Gunship.active;
     }
 
     // ---------- векторная математика ----------

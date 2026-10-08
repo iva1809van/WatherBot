@@ -1,8 +1,9 @@
 {
   "key.category.flighthud.main": "Flight HUD",
   "key.flighthud.toggle": "Toggle pilot HUD",
-  "key.flighthud.mode": "Mode: fighter / drone",
+  "key.flighthud.mode": "AC-130 gunner mode",
   "key.flighthud.aero": "Toggle plane controls",
   "key.flighthud.level": "Level wings",
-  "key.flighthud.thermal": "Thermal vision (drone mode)"
+  "key.flighthud.thermal": "Thermal (AC-130)",
+  "key.flighthud.zoom": "Camera zoom (AC-130)"
 }

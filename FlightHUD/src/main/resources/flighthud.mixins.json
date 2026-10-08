@@ -2,6 +2,13 @@
   "required": true,
   "package": "com.iva.flighthud.aero.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["EntityTurnMixin", "CameraMixin"],
-  "injectors": { "defaultRequire": 1 }
+  "client": [
+    "EntityTurnMixin",
+    "CameraMixin",
+    "FallFlyingMixin",
+    "FovMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

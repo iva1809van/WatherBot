@@ -30,11 +30,20 @@ public class FlightHudClient implements ClientModInitializer {
                 "key.flighthud.aero", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, category));
         KeyMapping levelKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.flighthud.level", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_X, category));
+        KeyMapping thermalKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.flighthud.thermal", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, category));
+        KeyMapping zoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.flighthud.zoom", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, category));
         Nav.register();
         hideVanillaElements();
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             while (toggle.consumeClick()) enabled = !enabled;
-            while (mode.consumeClick()) droneMode = !droneMode;
+            while (mode.consumeClick()) Gunship.toggle(mc);
+            while (thermalKey.consumeClick()) {
+                Gunship.thermal = !Gunship.thermal;
+                if (!Gunship.active) Gunship.msg(mc, "Тепловизор работает в режиме AC-130 (клавиша I)", net.minecraft.ChatFormatting.GRAY);
+            }
+            while (zoomKey.consumeClick()) if (Gunship.active) Gunship.zoomIndex = (Gunship.zoomIndex + 1) % 4;
             while (aeroKey.consumeClick()) {
                 com.iva.flighthud.aero.Aero.enabled = !com.iva.flighthud.aero.Aero.enabled;
                 mc.gui.setOverlayMessage(net.minecraft.network.chat.Component.literal(
@@ -47,6 +56,7 @@ public class FlightHudClient implements ClientModInitializer {
             }
             com.iva.flighthud.aero.Aero.tick(mc);
             FlightData.tick(mc);
+            Gunship.tick(mc);
         });
         HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath("flighthud", "overlay"), FlightHud::renderOverlay);
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("flighthud", "hud"), FlightHud::render);

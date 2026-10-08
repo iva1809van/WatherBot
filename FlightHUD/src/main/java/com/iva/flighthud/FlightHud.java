@@ -27,7 +27,8 @@ final class FlightHud {
     /** Подложка под HUD (рисуется до ванильного интерфейса): эффект камеры дрона. */
     static void renderOverlay(GuiGraphicsExtractor g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
-        if (!visible(mc) || !FlightHudClient.droneMode) return;
+        if (!visible(mc) || !Gunship.active) return;
+        if (true) { GunshipHud.overlay(g, mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight()); return; }
         int w = mc.getWindow().getGuiScaledWidth();
         int h = mc.getWindow().getGuiScaledHeight();
         // Лёгкое затемнение и строки развёртки
@@ -53,6 +54,7 @@ final class FlightHud {
         float pitch = mc.player.getXRot();
         float yaw = mc.player.getYRot();
         double ppd = h / (double) Math.max(30, mc.options.fov().get()); // пикселей на градус
+        if (Gunship.active) { GunshipHud.render(g, mc, w, h); return; }
 
         if (FlightHudClient.droneMode) {
             droneFrame(g, font, w, h);
