@@ -20,7 +20,7 @@ final class GunshipHud {
 
     /** Затемнение: тепловизор — почти чёрный мир (видны только «тёплые» цели), TV — лёгкое. */
     static void overlay(GuiGraphicsExtractor g, int w, int h) {
-        g.fill(0, 0, w, h, Gunship.thermal ? 0xD0101418 : 0x28000000);
+        g.fill(0, 0, w, h, Gunship.thermal ? 0xB0141414 : 0x28000000);
         for (int y = 0; y < h; y += 3) g.fill(0, y, w, y + 1, 0x14000000);
     }
 
@@ -334,19 +334,23 @@ final class GunshipHud {
         }
     }
 
-    /** Тепловые пятна: живые существа светятся белым («белый — горячий»). */
+    /** Тепловые пятна по реальному размеру существа на экране (низ и верх проецируются отдельно). */
     private static void heatBlobs(GuiGraphicsExtractor g, int cx, int cy, float yaw, float pitch, double ppd, int w, int h) {
         for (FlightData.Target t : FlightData.targets) {
-            if (t.e().isRemoved()) continue;
-            int[] pos = Projector.project(Projector.center(t.e()));
-            if (pos == null) continue;
-            int x = pos[0], y = pos[1];
-            if (x < -20 || x > w + 20 || y < -20 || y > h + 20) continue;
-            int hw = Projector.radius(t.w(), t.dist());
-            int hh = Projector.radius(t.h(), t.dist());
-            g.fill(x - hw - 2, y - hh - 2, x + hw + 2, y + hh + 2, 0x50B0B0B0);
-            g.fill(x - hw, y - hh, x + hw, y + hh, 0xC0E0E0E0);
-            g.fill(x - hw / 2, y - hh / 2, x + Math.max(1, hw / 2), y + Math.max(1, hh / 2), 0xFFFFFFFF);
+            var e = t.e();
+            if (e.isRemoved()) continue;
+            Vec3 base = e.getPosition(Projector.partial);
+            int[] bot = Projector.project(base);
+            int[] top = Projector.project(base.add(0, e.getBbHeight(), 0));
+            if (bot == null || top == null) continue;
+            int x = (bot[0] + top[0]) / 2, y = (bot[1] + top[1]) / 2;
+            if (x < -30 || x > w + 30 || y < -30 || y > h + 30) continue;
+            int hh = Math.max(4, Math.abs(bot[1] - top[1]) / 2 + 1);
+            int hw = Math.max(3, (int) Math.round(hh * e.getBbWidth() / Math.max(0.3, e.getBbHeight())) + 1);
+            g.fill(x - hw - 3, y - hh - 3, x + hw + 3, y + hh + 3, 0x40FFFFFF);
+            g.fill(x - hw - 1, y - hh - 1, x + hw + 1, y + hh + 1, 0x90FFFFFF);
+            g.fill(x - hw, y - hh, x + hw, y + hh, 0xE0F4F4F4);
+            g.fill(x - Math.max(1, hw / 2), y - Math.max(1, hh / 2), x + Math.max(1, hw / 2), y + Math.max(1, hh / 2), 0xFFFFFFFF);
         }
     }
 }

@@ -6,7 +6,8 @@
     "EntityTurnMixin",
     "CameraMixin",
     "FallFlyingMixin",
-    "FovMixin"
+    "FovMixin",
+    "ThermalOutlineMixin"
   ],
   "injectors": {
     "defaultRequire": 1
