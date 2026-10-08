@@ -470,6 +470,15 @@ final class FlightHud {
         g.text(font, "ELY " + (FlightData.elytraPercent < 0 ? "--" : FlightData.elytraPercent + "%"), x, y, ec, false);
         String rkt = "RKT " + FlightData.rockets + (FlightData.battery >= 0 ? " (" + FlightData.battery + "%)" : "");
         g.text(font, rkt, x, y + 10, FlightData.rockets == 0 ? AMBER : main(), false);
+        // Запас по длительности полёта: I / II / III
+        int rx = x + font.width(rkt) + 8;
+        String[] lvl = {"", "I", "II", "III"};
+        for (int pw = 1; pw <= 3; pw++) {
+            int n = FlightData.rocketsByPower[pw];
+            String s = lvl[pw] + ":" + n;
+            g.text(font, s, rx, y + 10, n == 0 ? dim() : main(), false);
+            rx += font.width(s) + 6;
+        }
         int hc = FlightData.health <= FlightData.maxHealth * 0.3 ? RED : main();
         g.text(font, String.format("HP  %.0f/%.0f", FlightData.health, FlightData.maxHealth), x, y + 20, hc, false);
         int sec = FlightData.flightTicks / 20;

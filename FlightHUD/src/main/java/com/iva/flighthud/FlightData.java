@@ -20,6 +20,8 @@ final class FlightData {
     static float velYaw, velPitch;
     static int elytraPercent = -1;
     static int rockets;
+    /** Фейерверки по длительности полёта: [0] — без данных/прочие, [1..3]. */
+    static final int[] rocketsByPower = new int[4];
     static int flightTicks;
     static double groundSpeed;      // горизонтальная скорость, блоков/с
     static double glideRatio = -1;  // аэродинамическое качество (гориз./верт.)
@@ -86,9 +88,15 @@ final class FlightData {
                 ? (int) Math.round(100.0 * (chest.getMaxDamage() - chest.getDamageValue()) / chest.getMaxDamage()) : -1;
 
         int r = 0;
+        java.util.Arrays.fill(rocketsByPower, 0);
         for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
             ItemStack s = p.getInventory().getItem(i);
-            if (s.is(Items.FIREWORK_ROCKET)) r += s.getCount();
+            if (s.is(Items.FIREWORK_ROCKET)) {
+                r += s.getCount();
+                var fw = s.get(net.minecraft.core.component.DataComponents.FIREWORKS);
+                int pw = fw == null ? 1 : fw.flightDuration();
+                rocketsByPower[Math.max(0, Math.min(3, pw))] += s.getCount();
+            }
         }
         rockets = r;
 
