@@ -60,10 +60,17 @@ final class FlightHud {
             pitchLadder(g, font, cx, cy, pitch, ppd, h);
         }
         headingTape(g, font, cx, yaw);
+        if (!FlightHudClient.droneMode) {
+            modeRow(g, font, w);
+            horizonHeading(g, font, cx, cy, yaw, pitch, ppd, h);
+            compassRose(g, font, cx, h, yaw);
+        }
+        waypointMarker(g, font, cx, cy, yaw, pitch, ppd, w, h);
         targets(g, font, cx, cy, yaw, pitch, ppd, w, h);
         reticle(g, cx, cy);
         velocityMarker(g, cx, cy, yaw, pitch, ppd);
-        sideBoxes(g, font, cx, cy, w, h);
+        speedTape(g, font, cx, cy, w);
+        altitudeTape(g, font, cx, cy, w);
         status(g, font, h);
         telemetry(g, font, w, h);
         warnings(g, font, cx, cy);
@@ -274,43 +281,184 @@ final class FlightHud {
         vLine(g, x, y - 8, y - 4, c);
     }
 
-    /** Слева скорость и ускорение, справа высота и шкала вертикальной скорости. */
-    private static void sideBoxes(GuiGraphicsExtractor g, Font font, int cx, int cy, int w, int h) {
-        int off = Math.min(150, w / 3);
+    /**
+     * Лента скорости слева: движущаяся шкала (б/с), текущее значение в рамке,
+     * тренд (куда придёт скорость через 5 с), метка заданной скорости.
+     */
+    private static void speedTape(GuiGraphicsExtractor g, Font font, int cx, int cy, int w) {
         int c = main(), d = dim();
-
-        // Скорость
-        int lx = cx - off;
-        box(g, lx - 30, cy - 7, lx + 6, cy + 7, c);
-        String spd = String.valueOf(Math.round(FlightData.speed));
-        g.text(font, spd, lx + 3 - font.width(spd), cy - 3, c, false);
-        g.text(font, "SPD б/с", lx - 30, cy + 10, d, false);
-        String acc = (FlightData.accel >= 0 ? "▲" : "▼") + String.format("%.1f", Math.abs(FlightData.accel));
-        g.text(font, acc, lx - 30, cy - 18, Math.abs(FlightData.accel) > 15 ? AMBER : d, false);
-        g.text(font, "GS " + Math.round(FlightData.groundSpeed), lx - 30, cy + 20, d, false);
-
-        // Высота
-        int rx = cx + off;
-        box(g, rx - 6, cy - 7, rx + 34, cy + 7, c);
-        g.text(font, String.valueOf(Math.round(FlightData.altitude)), rx - 2, cy - 3, c, false);
-        g.text(font, "ALT Y", rx - 6, cy + 10, d, false);
-        String ra = FlightData.radarAlt < 0 ? "R ---" : "R " + Math.round(FlightData.radarAlt);
-        g.text(font, ra, rx - 6, cy - 18, FlightData.radarAlt >= 0 && FlightData.radarAlt < 10 ? AMBER : d, false);
-
-        // Шкала вертикальной скорости (VSI): ±30 б/с, стрелка
-        int vx = rx + 42, top = cy - 40, bottom = cy + 40;
-        vLine(g, vx, top, bottom, d);
-        for (int v = -30; v <= 30; v += 10) {
-            int y = cy - (int) Math.round(v / 30.0 * 40);
-            hLine(g, vx, vx + (v == 0 ? 5 : 3), y, d);
+        int x = cx - Math.min(150, w / 3);
+        int half = 60;             // половина высоты ленты, px
+        double pxPerUnit = 4;      // px на 1 б/с
+        double v = FlightData.speed;
+        vLine(g, x, cy - half, cy + half, d);
+        int lo = (int) Math.floor(v - half / pxPerUnit), hi = (int) Math.ceil(v + half / pxPerUnit);
+        for (int u = Math.max(0, lo); u <= hi; u++) {
+            int y = (int) Math.round(cy - (u - v) * pxPerUnit);
+            if (Math.abs(y - cy) > half) continue;
+            boolean major = u % 5 == 0;
+            hLine(g, x - (major ? 6 : 3), x, y, d);
+            if (major && Math.abs(y - cy) > 9) {
+                String s = String.valueOf(u);
+                g.text(font, s, x - 8 - font.width(s), y - 4, d, false);
+            }
         }
-        double vs = Mth.clamp(FlightData.vsSmooth, -30, 30);
-        int vy = cy - (int) Math.round(vs / 30.0 * 40);
+        // Тренд: полоса от текущей скорости к прогнозу через 5 секунд
+        double trend = Mth.clamp(FlightData.accel * 5, -half / pxPerUnit, half / pxPerUnit);
+        int ty = (int) Math.round(cy - trend * pxPerUnit);
+        if (Math.abs(ty - cy) > 2) g.fill(x + 1, Math.min(cy, ty), x + 4, Math.max(cy, ty), c);
+        // Заданная скорость
+        if (Nav.targetSpeed > 0) {
+            int sy = (int) Math.round(cy - (Nav.targetSpeed - v) * pxPerUnit);
+            sy = Mth.clamp(sy, cy - half, cy + half);
+            g.text(font, "◀", x + 3, sy - 4, AMBER, false);
+            g.text(font, String.valueOf(Nav.targetSpeed), x - 20, cy - half - 12, AMBER, false);
+        }
+        // Текущее значение
+        String spd = String.valueOf(Math.round(v));
+        g.fill(x - 34, cy - 7, x - 2, cy + 8, 0x90000000);
+        box(g, x - 34, cy - 7, x - 2, cy + 8, c);
+        g.text(font, spd, x - 5 - font.width(spd), cy - 3, c, false);
+        g.text(font, "SPD б/с", x - 34, cy + half + 4, d, false);
+        g.text(font, "GS " + Math.round(FlightData.groundSpeed), x - 34, cy + half + 14, d, false);
+    }
+
+    /**
+     * Лента высоты справа: движущаяся шкала (Y), текущее значение в рамке,
+     * вертикальная скорость под ней, радиовысота, метка заданной высоты.
+     */
+    private static void altitudeTape(GuiGraphicsExtractor g, Font font, int cx, int cy, int w) {
+        int c = main(), d = dim();
+        int x = cx + Math.min(150, w / 3);
+        int half = 60;
+        double pxPerUnit = 2;      // px на 1 блок
+        double alt = FlightData.altitude;
+        vLine(g, x, cy - half, cy + half, d);
+        int lo = (int) Math.floor(alt - half / pxPerUnit), hi = (int) Math.ceil(alt + half / pxPerUnit);
+        for (int u = lo; u <= hi; u++) {
+            if (Math.floorMod(u, 5) != 0) continue;
+            int y = (int) Math.round(cy - (u - alt) * pxPerUnit);
+            if (Math.abs(y - cy) > half) continue;
+            boolean major = u % 10 == 0;
+            hLine(g, x, x + (major ? 6 : 3), y, d);
+            if (major && Math.abs(y - cy) > 9) g.text(font, String.valueOf(u), x + 8, y - 4, d, false);
+        }
+        // Земля под нами — штриховка на ленте
+        if (FlightData.radarAlt >= 0) {
+            int gy = (int) Math.round(cy + FlightData.radarAlt * pxPerUnit);
+            if (gy < cy + half) {
+                for (int y = Math.max(gy, cy - half); y < cy + half; y += 3) hLine(g, x - 4, x, y, AMBER);
+            }
+        }
+        // Заданная высота
+        if (Nav.targetAlt != 0) {
+            int ay = (int) Math.round(cy - (Nav.targetAlt - alt) * pxPerUnit);
+            ay = Mth.clamp(ay, cy - half, cy + half);
+            g.text(font, "▶", x - 8, ay - 4, AMBER, false);
+            g.text(font, "Y " + Nav.targetAlt, x + 2, cy - half - 12, AMBER, false);
+        }
+        // Текущее значение
+        String a = String.valueOf(Math.round(alt));
+        g.fill(x + 2, cy - 7, x + 38, cy + 8, 0x90000000);
+        box(g, x + 2, cy - 7, x + 38, cy + 8, c);
+        g.text(font, a, x + 6, cy - 3, c, false);
+        // Вертикальная скорость
         int vc = FlightData.vsSmooth < -15 ? AMBER : c;
-        g.fill(vx - 4, vy, vx, vy + 1, vc);
-        g.fill(vx - 3, vy - 1, vx - 1, vy + 2, vc);
-        g.text(font, String.format("%+.1f", FlightData.vsSmooth), vx + 7, vy - 4, vc, false);
-        g.text(font, "VS", vx - 2, bottom + 4, d, false);
+        g.text(font, String.format("%+.1f VS", FlightData.vsSmooth), x + 2, cy + half + 4, vc, false);
+        String ra = FlightData.radarAlt < 0 ? "R ---" : "R " + Math.round(FlightData.radarAlt);
+        g.text(font, ra, x + 2, cy + half + 14, FlightData.radarAlt >= 0 && FlightData.radarAlt < 10 ? AMBER : d, false);
+    }
+
+    /** Строка режимов вверху: управление, навигация, заданные значения. */
+    private static void modeRow(GuiGraphicsExtractor g, Font font, int w) {
+        int y = 40, c = main(), d = dim();
+        boolean aero = com.iva.flighthud.aero.Aero.active(Minecraft.getInstance().player);
+        g.text(font, aero ? "AERO" : "MAN", 40, y, aero ? c : d, false);
+        g.text(font, Nav.hasWaypoint() ? "LNAV" : "", 80, y, c, false);
+        String right = (Nav.targetSpeed > 0 ? "SPD " + Nav.targetSpeed + "  " : "")
+                + (Nav.targetAlt != 0 ? "ALT " + Nav.targetAlt : "");
+        g.text(font, right, w - 40 - font.width(right), y, c, false);
+    }
+
+    /** Курс прямо на линии горизонта: метки каждые 10° с подписью (24 = 240°). */
+    private static void horizonHeading(GuiGraphicsExtractor g, Font font, int cx, int cy, float yaw, float pitch, double ppd, int h) {
+        double a = rollRad();
+        double y = -pitch * ppd; // линия горизонта
+        if (Math.abs(y) > h * 0.4) return;
+        float heading = Mth.positiveModulo(yaw + 180f, 360f);
+        for (int deg = 0; deg < 360; deg += 10) {
+            double dx = Mth.wrapDegrees(deg - heading) * ppd;
+            if (Math.abs(dx) < 75 || Math.abs(dx) > 160) continue; // не перекрываем центр шкалы тангажа
+            rLine(g, cx, cy, dx, y, dx, y + 4, a, dim());
+            int[] p = rotate(cx, cy, dx, y + 10, a);
+            g.centeredText(font, String.format("%02d", deg / 10), p[0], p[1] - 4, dim());
+        }
+        // Продолжение горизонта за пределами шкалы тангажа
+        rLine(g, cx, cy, -160, y, -70, y, a, dim());
+        rLine(g, cx, cy, 70, y, 160, y, a, dim());
+    }
+
+    /** Компасная роза внизу по центру; стрелка — направление на путевую точку. */
+    private static void compassRose(GuiGraphicsExtractor g, Font font, int cx, int h, float yaw) {
+        float heading = Mth.positiveModulo(yaw + 180f, 360f);
+        int r = 48, ocx = cx, ocy = h + 12; // центр ниже экрана — видна верхняя дуга
+        for (int deg = 0; deg < 360; deg += 10) {
+            double t = Math.toRadians(deg - heading);
+            double sin = Math.sin(t), cos = Math.cos(t);
+            if (cos < 0.15) continue;
+            int len = deg % 30 == 0 ? 6 : 3;
+            line(g, (int) Math.round(ocx + sin * r), (int) Math.round(ocy - cos * r),
+                    (int) Math.round(ocx + sin * (r - len)), (int) Math.round(ocy - cos * (r - len)), dim());
+            if (deg % 30 == 0) {
+                String s = switch (deg) {
+                    case 0 -> "N"; case 90 -> "E"; case 180 -> "S"; case 270 -> "W"; default -> String.valueOf(deg / 10);
+                };
+                g.centeredText(font, s, (int) Math.round(ocx + sin * (r - 13)), (int) Math.round(ocy - cos * (r - 13)) - 4,
+                        deg % 90 == 0 ? main() : dim());
+            }
+        }
+        g.centeredText(font, "▼", ocx, ocy - r - 9, main());
+        if (Nav.hasWaypoint()) {
+            double t = Math.toRadians(bearingToWp() - heading);
+            int x1 = (int) Math.round(ocx + Math.sin(t) * (r - 20)), y1 = (int) Math.round(ocy - Math.cos(t) * (r - 20));
+            int x2 = (int) Math.round(ocx + Math.sin(t) * (r - 2)), y2 = (int) Math.round(ocy - Math.cos(t) * (r - 2));
+            line(g, x1, y1, x2, y2, AMBER);
+        }
+    }
+
+    private static double bearingToWp() {
+        var p = Minecraft.getInstance().player;
+        double dx = Nav.wpX + 0.5 - p.getX(), dz = Nav.wpZ + 0.5 - p.getZ();
+        // 0 = север, по часовой
+        return Mth.positiveModulo((float) Math.toDegrees(Math.atan2(dx, -dz)), 360f);
+    }
+
+    /** Путевая точка: метка на ленте курса, ромб на горизонте, строка с расстоянием и пеленгом. */
+    private static void waypointMarker(GuiGraphicsExtractor g, Font font, int cx, int cy, float yaw, float pitch, double ppd, int w, int h) {
+        if (!Nav.hasWaypoint()) return;
+        var p = Minecraft.getInstance().player;
+        double brg = bearingToWp();
+        float heading = Mth.positiveModulo(yaw + 180f, 360f);
+        double diff = Mth.wrapDegrees((float) (brg - heading));
+        double dist = Math.hypot(Nav.wpX + 0.5 - p.getX(), Nav.wpZ + 0.5 - p.getZ());
+
+        // На ленте курса
+        int top = FlightHudClient.droneMode ? 28 : 6;
+        int tx = (int) Math.round(cx + Mth.clamp(diff, -60, 60) * 2);
+        g.centeredText(font, "▼", tx, top + 4, AMBER);
+
+        // На горизонте
+        if (Math.abs(diff) < 60) {
+            int[] pos = rotate(cx, cy, diff * ppd, -pitch * ppd, rollRad());
+            diamond(g, pos[0], pos[1], 5, AMBER);
+            g.centeredText(font, Nav.wpName, pos[0], pos[1] - 16, AMBER);
+        }
+
+        // Строка навигации
+        int sec = FlightData.groundSpeed > 1 ? (int) (dist / FlightData.groundSpeed) : -1;
+        String txt = String.format("%s  %d бл  BRG %03d%s", Nav.wpName, Math.round(dist), Math.round(brg) % 360,
+                sec >= 0 ? String.format("  ETE %d:%02d", sec / 60, sec % 60) : "");
+        g.centeredText(font, txt, cx, h - 70, AMBER);
     }
 
     /** Нижний левый блок: элитры, ракеты, здоровье, время, координаты. */
@@ -318,7 +466,8 @@ final class FlightHud {
         int x = 8 + (FlightHudClient.droneMode ? 14 : 0), y = h - 76 - (FlightHudClient.droneMode ? 10 : 0);
         int ec = FlightData.elytraPercent >= 0 && FlightData.elytraPercent < 15 ? RED : main();
         g.text(font, "ELY " + (FlightData.elytraPercent < 0 ? "--" : FlightData.elytraPercent + "%"), x, y, ec, false);
-        g.text(font, "RKT " + FlightData.rockets, x, y + 10, FlightData.rockets == 0 ? AMBER : main(), false);
+        String rkt = "RKT " + FlightData.rockets + (FlightData.battery >= 0 ? " (" + FlightData.battery + "%)" : "");
+        g.text(font, rkt, x, y + 10, FlightData.rockets == 0 ? AMBER : main(), false);
         int hc = FlightData.health <= FlightData.maxHealth * 0.3 ? RED : main();
         g.text(font, String.format("HP  %.0f/%.0f", FlightData.health, FlightData.maxHealth), x, y + 20, hc, false);
         int sec = FlightData.flightTicks / 20;

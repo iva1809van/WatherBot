@@ -30,6 +30,7 @@ public class FlightHudClient implements ClientModInitializer {
                 "key.flighthud.aero", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, category));
         KeyMapping levelKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.flighthud.level", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_X, category));
+        Nav.register();
         hideVanillaElements();
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             while (toggle.consumeClick()) enabled = !enabled;

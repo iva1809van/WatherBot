@@ -3,5 +3,6 @@
   "key.flighthud.toggle": "Toggle pilot HUD",
   "key.flighthud.mode": "Mode: fighter / drone",
   "key.flighthud.aero": "Toggle plane controls",
-  "key.flighthud.level": "Level wings"
+  "key.flighthud.level": "Level wings",
+  "key.flighthud.thermal": "Thermal vision (drone mode)"
 }

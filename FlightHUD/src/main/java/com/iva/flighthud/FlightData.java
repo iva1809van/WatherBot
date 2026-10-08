@@ -1,6 +1,7 @@
 package com.iva.flighthud;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -29,7 +30,14 @@ final class FlightData {
     static double vsSmooth;
     static final java.util.List<Target> targets = new java.util.ArrayList<>();
 
-    record Target(double yaw, double pitch, double dist, int color, String label) {}
+    record Target(double yaw, double pitch, double dist, int color, String label, double w, double h) {}
+
+    /** Фейерверки на момент взлёта — 100% «батареи». */
+    static int initialRockets;
+    static int battery = -1;            // %, -1 = нет данных
+    static int ping = -1;               // мс
+    static double lookDist = -1;        // дистанция до точки под прицелом
+    static Target acquired;             // цель в прицеле
 
     private static double lastSpeed;
     private static int warnCooldown;
@@ -39,7 +47,7 @@ final class FlightData {
     static void tick(Minecraft mc) {
         var p = mc.player;
         flying = p != null && p.isFallFlying();
-        if (!flying) { flightTicks = 0; targets.clear(); return; }
+        if (!flying) { flightTicks = 0; targets.clear(); acquired = null; return; }
         flightTicks++;
 
         Vec3 v = p.getDeltaMovement();
@@ -83,7 +91,26 @@ final class FlightData {
         }
         rockets = r;
 
+        if (flightTicks == 1 || rockets > initialRockets) initialRockets = rockets;
+        battery = initialRockets > 0 ? (int) Math.round(100.0 * rockets / initialRockets) : -1;
+
+        var conn = mc.getConnection();
+        var info = conn == null ? null : conn.getPlayerInfo(p.getUUID());
+        ping = info == null ? -1 : info.getLatency();
+
+        var look = p.pick(512, 1f, false);
+        lookDist = look.getType() == HitResult.Type.MISS ? -1 : look.getLocation().distanceTo(p.getEyePosition());
+
         collectTargets(mc);
+        acquired = null;
+        double best = Double.MAX_VALUE;
+        for (Target t : targets) {
+            double tol = Math.toDegrees(Math.atan2(Math.max(t.w(), t.h()) / 2 + 0.5, t.dist())) + 1;
+            if (Math.abs(Mth.wrapDegrees(t.yaw() - p.getYRot())) < tol && Math.abs(t.pitch() - p.getXRot()) < tol && t.dist() < best) {
+                best = t.dist();
+                acquired = t;
+            }
+        }
         sounds(mc);
     }
 
@@ -109,7 +136,7 @@ final class FlightData {
             } else {
                 color = 0xFF66FF66;
             }
-            targets.add(new Target(yaw, pitch, dist, color, label));
+            targets.add(new Target(yaw, pitch, dist, color, label, e.getBbWidth(), e.getBbHeight()));
         }
     }
 
