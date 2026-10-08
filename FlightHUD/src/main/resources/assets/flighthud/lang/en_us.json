@@ -1,1 +1,5 @@
-{"key.category.flighthud.main":"Flight HUD","key.flighthud.toggle":"Toggle pilot HUD"}
+{
+  "key.category.flighthud.main": "Flight HUD",
+  "key.flighthud.toggle": "Toggle pilot HUD",
+  "key.flighthud.mode": "Mode: fighter / drone"
+}

@@ -1,1 +1,5 @@
-{"key.category.flighthud.main":"Flight HUD","key.flighthud.toggle":"Включить/выключить HUD пилота"}
+{
+  "key.category.flighthud.main": "Flight HUD",
+  "key.flighthud.toggle": "Включить/выключить HUD пилота",
+  "key.flighthud.mode": "Режим: истребитель / дрон"
+}
