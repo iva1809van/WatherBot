@@ -61,17 +61,41 @@ final class Projector {
         return leadPoint(shooter, center(target), vt, speed, grav);
     }
 
-    /** Упреждение для произвольной точки tp, движущейся со скоростью vt (блоков/тик). */
+    /** Сопротивление воздуха снаряда за тик (стрела/трезубец). */
+    static final double DRAG = 0.99;
+
+    /**
+     * Упреждение для точки tp, движущейся со скоростью vt (блоков/тик).
+     * Пошагово моделируем полёт как в игре: снаряд получает скорость выстрела + скорость
+     * стрелка, каждый тик скорость умножается на DRAG и падает на grav.
+     * Ищем число тиков n, при котором нужная скорость выстрела равна реальной,
+     * и возвращаем точку далеко по направлению выстрела (для проекции на экран).
+     */
     static Vec3 leadPoint(Entity shooter, Vec3 tp, Vec3 vt, double speed, double grav) {
         Vec3 eye = shooter.getEyePosition(partial);
         Vec3 vs = shooter.getDeltaMovement();
-        Vec3 rel = tp.subtract(eye);
-        double t = rel.length() / speed;
-        Vec3 aim = rel;
-        for (int i = 0; i < 4; i++) {
-            aim = rel.add(vt.subtract(vs).scale(t)).add(0, 0.5 * grav * t * t, 0);
-            t = aim.length() / speed;
+        double drag = grav > 0 ? DRAG : 1.0;
+        Vec3 bestDir = tp.subtract(eye).normalize();
+        double bestErr = Double.MAX_VALUE;
+        double sum = 0;          // сумма drag^k — «путь» единичной скорости за n тиков
+        double gravDrop = 0;     // смещение по Y от гравитации за n тиков
+        double gv = 0;           // текущая «гравитационная» скорость
+        for (int n = 1; n <= 300; n++) {
+            sum += Math.pow(drag, n - 1);
+            gravDrop += gv;
+            gv = gv * drag - grav;
+            // где будет цель через n тиков
+            Vec3 target = tp.add(vt.scale(n));
+            // (u + vs) * sum + (0, gravDrop, 0) = target - eye
+            Vec3 need = target.subtract(eye).subtract(0, gravDrop, 0).scale(1.0 / sum).subtract(vs);
+            double err = Math.abs(need.length() - speed);
+            if (err < bestErr) {
+                bestErr = err;
+                bestDir = need.normalize();
+            }
+            // дальше нужная скорость только уменьшается — нашли переход, хватит
+            if (need.length() < speed) break;
         }
-        return eye.add(aim);
+        return eye.add(bestDir.scale(200));
     }
 }
