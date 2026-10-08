@@ -1,6 +1,6 @@
-package com.iva.aero.mixin;
+package com.iva.flighthud.aero.mixin;
 
-import com.iva.aero.Aero;
+import com.iva.flighthud.aero.Aero;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;

@@ -95,7 +95,7 @@ final class FlightHud {
 
     /** Крен в радианах для поворота символики (0, если управление самолётом выключено). */
     private static double rollRad() {
-        return com.iva.aero.Aero.active(Minecraft.getInstance().player) ? Math.toRadians(com.iva.aero.Aero.roll) : 0;
+        return com.iva.flighthud.aero.Aero.active(Minecraft.getInstance().player) ? Math.toRadians(com.iva.flighthud.aero.Aero.roll) : 0;
     }
 
     /**
@@ -158,7 +158,7 @@ final class FlightHud {
 
     /** Шкала крена: дуга с отметками 0/10/20/30/45/60° и указатель. */
     private static void bankIndicator(GuiGraphicsExtractor g, Font font, int cx, int cy, int h) {
-        if (!com.iva.aero.Aero.active(Minecraft.getInstance().player)) return;
+        if (!com.iva.flighthud.aero.Aero.active(Minecraft.getInstance().player)) return;
         int r = (int) (h * 0.30);
         int[] marks = {-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60};
         for (int m : marks) {
@@ -169,7 +169,7 @@ final class FlightHud {
             // дуга снизу экрана (как в кабине — указатель «небо» сверху), рисуем сверху центра
             line(g, x1, y1, x2, y2, dim());
         }
-        double roll = com.iva.aero.Aero.roll;
+        double roll = com.iva.flighthud.aero.Aero.roll;
         double t = Math.toRadians(Mth.clamp(roll, -70, 70));
         int px = (int) Math.round(cx + Math.sin(t) * (r - 2)), py = (int) Math.round(cy - Math.cos(t) * (r - 2));
         int c = Math.abs(roll) > 60 ? AMBER : main();

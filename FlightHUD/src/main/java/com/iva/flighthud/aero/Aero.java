@@ -1,4 +1,4 @@
-package com.iva.aero;
+package com.iva.flighthud.aero;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;

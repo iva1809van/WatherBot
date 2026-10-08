@@ -1,6 +1,6 @@
-package com.iva.aero.mixin;
+package com.iva.flighthud.aero.mixin;
 
-import com.iva.aero.Aero;
+import com.iva.flighthud.aero.Aero;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
