@@ -34,6 +34,8 @@ public class FlightHudClient implements ClientModInitializer {
                 "key.flighthud.thermal", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, category));
         KeyMapping zoomKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.flighthud.zoom", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, category));
+        KeyMapping lockKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.flighthud.lock", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G, category));
         Nav.register();
         hideVanillaElements();
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
@@ -43,6 +45,7 @@ public class FlightHudClient implements ClientModInitializer {
                 Gunship.thermal = !Gunship.thermal;
                 if (!Gunship.active) Gunship.msg(mc, "Тепловизор работает в режиме AC-130 (клавиша I)", net.minecraft.ChatFormatting.GRAY);
             }
+            while (lockKey.consumeClick()) Gunship.toggleLock(mc);
             while (zoomKey.consumeClick()) if (Gunship.active) Gunship.zoomIndex = (Gunship.zoomIndex + 1) % 4;
             while (aeroKey.consumeClick()) {
                 com.iva.flighthud.aero.Aero.enabled = !com.iva.flighthud.aero.Aero.enabled;

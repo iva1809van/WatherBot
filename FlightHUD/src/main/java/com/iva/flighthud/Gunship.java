@@ -21,6 +21,34 @@ public final class Gunship {
     public static int zoomIndex;
     private static final double[] ZOOMS = {1, 2, 4, 8};
     static double centerX, centerZ, holdY;
+    /** Захваченная цель: моб/игрок или точка на земле. */
+    static net.minecraft.world.entity.Entity lockedEntity;
+    static Vec3 lockedPoint;
+
+    static boolean hasLock() { return lockedEntity != null || lockedPoint != null; }
+
+    /** G: захват того, что в прицеле (существо или точка), повторно — сброс. */
+    static void toggleLock(Minecraft mc) {
+        if (!active) return;
+        if (hasLock()) {
+            lockedEntity = null;
+            lockedPoint = null;
+            msg(mc, "Захват сброшен", ChatFormatting.GRAY);
+            return;
+        }
+        if (FlightData.hover != null) {
+            lockedEntity = FlightData.hover.e();
+            msg(mc, "Цель захвачена", ChatFormatting.RED);
+            return;
+        }
+        var hit = mc.player.pick(512, 1f, false);
+        if (hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+            lockedPoint = hit.getLocation();
+            msg(mc, String.format("Точка захвачена: %d %d %d", Math.round(lockedPoint.x), Math.round(lockedPoint.y), Math.round(lockedPoint.z)), ChatFormatting.GOLD);
+        } else {
+            msg(mc, "Нечего захватывать: слишком далеко", ChatFormatting.GRAY);
+        }
+    }
     static int recTicks;
 
     private Gunship() {}
@@ -67,6 +95,8 @@ public final class Gunship {
 
     static void exit(Minecraft mc, String why) {
         active = false;
+        lockedEntity = null;
+        lockedPoint = null;
         msg(mc, why, ChatFormatting.GRAY);
     }
 
@@ -83,6 +113,11 @@ public final class Gunship {
             return;
         }
         recTicks++;
+        if (lockedEntity != null && (lockedEntity.isRemoved() || !lockedEntity.isAlive()
+                || lockedEntity.distanceTo(p) > 300)) {
+            lockedEntity = null;
+            msg(mc, "Цель потеряна", ChatFormatting.GRAY);
+        }
     }
 
     /** Скорость на орбите: касательная (левый вираж) + удержание радиуса и высоты. */

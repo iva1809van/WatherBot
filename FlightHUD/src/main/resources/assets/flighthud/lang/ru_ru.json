@@ -5,5 +5,6 @@
   "key.flighthud.aero": "Управление самолётом вкл/выкл",
   "key.flighthud.level": "Выровнять крен",
   "key.flighthud.thermal": "Тепловизор (AC-130)",
-  "key.flighthud.zoom": "Зум камеры (AC-130)"
+  "key.flighthud.zoom": "Зум камеры (AC-130)",
+  "key.flighthud.lock": "Захват цели / точки (AC-130)"
 }

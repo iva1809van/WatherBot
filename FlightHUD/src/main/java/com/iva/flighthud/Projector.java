@@ -57,9 +57,13 @@ final class Projector {
      * и гравитацией grav попал в движущуюся цель с учётом своей скорости.
      */
     static Vec3 leadPoint(Entity shooter, Entity target, double speed, double grav) {
-        Vec3 eye = shooter.getEyePosition(partial);
-        Vec3 tp = center(target);
         Vec3 vt = new Vec3(target.getX() - target.xo, target.getY() - target.yo, target.getZ() - target.zo);
+        return leadPoint(shooter, center(target), vt, speed, grav);
+    }
+
+    /** Упреждение для произвольной точки tp, движущейся со скоростью vt (блоков/тик). */
+    static Vec3 leadPoint(Entity shooter, Vec3 tp, Vec3 vt, double speed, double grav) {
+        Vec3 eye = shooter.getEyePosition(partial);
         Vec3 vs = shooter.getDeltaMovement();
         Vec3 rel = tp.subtract(eye);
         double t = rel.length() / speed;

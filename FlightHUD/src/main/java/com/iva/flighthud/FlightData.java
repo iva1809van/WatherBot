@@ -38,6 +38,7 @@ final class FlightData {
     static int ping = -1;               // мс
     static double lookDist = -1;        // дистанция до точки под прицелом
     static Target acquired;             // цель в прицеле
+    static Target hover;                // цель под прицелом (можно захватить)
 
     private static double lastSpeed;
     private static int warnCooldown;
