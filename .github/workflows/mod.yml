@@ -2,7 +2,7 @@ name: Build Fabric mod
 
 on:
   push:
-    paths: ["BreedingIndicator/**", "IvaUtils/**", "FlightHUD/**", ".github/workflows/mod.yml"]
+    paths: ["BreedingIndicator/**", "IvaUtils/**", "FlightHUD/**", "AeroElytra/**", ".github/workflows/mod.yml"]
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mod: [BreedingIndicator, IvaUtils, FlightHUD]
+        mod: [BreedingIndicator, IvaUtils, FlightHUD, AeroElytra]
     defaults:
       run:
         working-directory: ${{ matrix.mod }}
@@ -36,48 +36,6 @@ jobs:
 
       - name: Build
         run: gradle build --no-daemon $PROPS
-
-      - name: Probe
-        if: ${{ always() && matrix.mod == 'FlightHUD' }}
-        run: |
-          set +e
-          J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
-          echo "=====PROBE====="
-          javap -cp "$J" -p net.minecraft.client.Camera | grep -Ev 'lambda|static final'
-          javap -cp "$J" -p net.minecraft.client.MouseHandler | grep -Ei 'turn|accumulat|sensitiv'
-          javap -cp "$J" -p net.minecraft.world.entity.Entity | grep -Ei ' turn|setXRot|setYRot|getViewVector|calculateViewVector|lookAngle'
-          javap -cp "$J" -p net.minecraft.world.entity.LivingEntity | grep -Ei 'fall|elytra|glid|travel'
-          javap -cp "$J" -p net.minecraft.client.renderer.GameRenderer | grep -Ei 'bob|camera|renderLevel|extract'
-          javap -cp "$J" -p net.minecraft.client.player.LocalPlayer | grep -Ei 'aiStep|input|fall'
-          echo "=====END====="
-
-      - name: Probe
-        if: ${{ always() && matrix.mod == 'FlightHUD' }}
-        run: |
-          set +e
-          J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
-          echo "=====PROBE====="
-          javap -cp "$J" -p net.minecraft.client.Camera | grep -Ev 'lambda|static final'
-          javap -cp "$J" -p net.minecraft.client.MouseHandler | grep -Ei 'turn|accumulat|sensitiv'
-          javap -cp "$J" -p net.minecraft.world.entity.Entity | grep -Ei ' turn|setXRot|setYRot|getViewVector|calculateViewVector|lookAngle'
-          javap -cp "$J" -p net.minecraft.world.entity.LivingEntity | grep -Ei 'fall|elytra|glid|travel'
-          javap -cp "$J" -p net.minecraft.client.renderer.GameRenderer | grep -Ei 'bob|camera|renderLevel|extract|projection'
-          javap -cp "$J" -p net.minecraft.client.renderer.state.level.CameraRenderState
-          echo "=====END====="
-
-      - name: Probe
-        if: ${{ always() && matrix.mod == 'FlightHUD' }}
-        run: |
-          set +e
-          J=$(find ~/.gradle/caches/fabric-loom -name 'minecraft-merged-deobf-*.jar' | head -1)
-          echo "=====PROBE====="
-          javap -cp "$J" -p net.minecraft.client.Camera | grep -Ev 'lambda|static final'
-          javap -cp "$J" -p net.minecraft.client.MouseHandler | grep -Ei 'turn|accumulat|sensitiv'
-          javap -cp "$J" -p net.minecraft.world.entity.Entity | grep -Ei ' turn|setXRot|setYRot|getViewVector|calculateViewVector|lookAngle'
-          javap -cp "$J" -p net.minecraft.world.entity.LivingEntity | grep -Ei 'fall|elytra|glid|travel'
-          javap -cp "$J" -p net.minecraft.client.renderer.GameRenderer | grep -Ei 'bob|camera|renderLevel|extract|projection'
-          javap -cp "$J" -p net.minecraft.client.renderer.state.level.CameraRenderState
-          echo "=====END====="
 
       - uses: actions/upload-artifact@v4
         if: success()

@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "com.iva.aero.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["EntityTurnMixin", "CameraMixin"],
+  "injectors": { "defaultRequire": 1 }
+}
