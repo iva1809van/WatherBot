@@ -213,7 +213,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
             text = text.append(lines.get(i));
         }
         final Component content = text.colorIfAbsent(NamedTextColor.BLACK);
-        b.getWorld().spawn(base, TextDisplay.class, t -> {
+        TextDisplay main = b.getWorld().spawn(base, TextDisplay.class, t -> {
             storeLines(t, lines);
             t.setBillboard(Display.Billboard.FIXED);
             t.setDefaultBackground(false);
@@ -225,8 +225,8 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
             tag(t.getPersistentDataContainer(), group, null);
-            render(t);
         });
+        render(main);
 
         // Хитбокс у стены
         // Хитбокс ровно по доске: Interaction квадратный в плане, поэтому доску
@@ -317,7 +317,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         // На полу текст «растёт» от ближнего к игроку края, на потолке — наоборот
         float textZ = p.ceiling() ? -TEXT_SCALE / 2f : TEXT_SCALE / 2f;
         float angle = (float) Math.toRadians(p.ceiling() ? 90 : -90);
-        b.getWorld().spawn(base, TextDisplay.class, t -> {
+        TextDisplay main = b.getWorld().spawn(base, TextDisplay.class, t -> {
             storeLines(t, lines);
             t.setBillboard(Display.Billboard.FIXED);
             t.setDefaultBackground(false);
@@ -329,8 +329,8 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
             tag(t.getPersistentDataContainer(), group, null);
-            render(t);
         });
+        render(main);
 
         // Невидимый хитбокс, чтобы табличку можно было сломать
         float hitHeight = 0.15f;
@@ -377,20 +377,93 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         return out;
     }
 
-    /** Перерисовать текст с учётом цвета и свечения (как у обычной таблички). */
+    /** Цвета текста красителей — как в игре (отличаются от цветов самих красителей). */
+    private static final Map<org.bukkit.DyeColor, Integer> TEXT_COLORS = new java.util.EnumMap<>(org.bukkit.DyeColor.class);
+    static {
+        TEXT_COLORS.put(org.bukkit.DyeColor.WHITE, 0xFFFFFF);
+        TEXT_COLORS.put(org.bukkit.DyeColor.ORANGE, 0xFF681F);
+        TEXT_COLORS.put(org.bukkit.DyeColor.MAGENTA, 0xFF00FF);
+        TEXT_COLORS.put(org.bukkit.DyeColor.LIGHT_BLUE, 0x9AC0CD);
+        TEXT_COLORS.put(org.bukkit.DyeColor.YELLOW, 0xFFFF00);
+        TEXT_COLORS.put(org.bukkit.DyeColor.LIME, 0xBFFF00);
+        TEXT_COLORS.put(org.bukkit.DyeColor.PINK, 0xFF69B4);
+        TEXT_COLORS.put(org.bukkit.DyeColor.GRAY, 0x808080);
+        TEXT_COLORS.put(org.bukkit.DyeColor.LIGHT_GRAY, 0xD3D3D3);
+        TEXT_COLORS.put(org.bukkit.DyeColor.CYAN, 0x00FFFF);
+        TEXT_COLORS.put(org.bukkit.DyeColor.PURPLE, 0xA020F0);
+        TEXT_COLORS.put(org.bukkit.DyeColor.BLUE, 0x0000FF);
+        TEXT_COLORS.put(org.bukkit.DyeColor.BROWN, 0x8B4513);
+        TEXT_COLORS.put(org.bukkit.DyeColor.GREEN, 0x00FF00);
+        TEXT_COLORS.put(org.bukkit.DyeColor.RED, 0xFF0000);
+        TEXT_COLORS.put(org.bukkit.DyeColor.BLACK, 0x000000);
+    }
+
+    /** Как в игре: тёмный вариант цвета = ×0.4 по каналам. */
+    private static int darken(int rgb) {
+        int r = (int) (((rgb >> 16) & 0xFF) * 0.4), g = (int) (((rgb >> 8) & 0xFF) * 0.4), b = (int) ((rgb & 0xFF) * 0.4);
+        return (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * Перерисовать текст как у настоящей таблички.
+     * Обычный текст — цвет ×0.4, светящийся — цвет в полную яркость и контур
+     * тёмного оттенка (у чёрного текста контур светлый).
+     */
     private void render(TextDisplay t) {
         PersistentDataContainer pdc = t.getPersistentDataContainer();
         int rgb = pdc.getOrDefault(key("color"), PersistentDataType.INTEGER, 0x000000);
         boolean glow = pdc.getOrDefault(key("glow"), PersistentDataType.BYTE, (byte) 0) == 1;
+        String group = pdc.get(groupKey, PersistentDataType.STRING);
+
+        // убрать прежний контур
+        for (Entity e : t.getWorld().getNearbyEntities(t.getLocation(), 1.5, 1.5, 1.5)) {
+            if (e instanceof TextDisplay o && o != t && group != null
+                    && group.equals(o.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING))
+                    && o.getPersistentDataContainer().has(key("outline"), PersistentDataType.BYTE)) {
+                o.remove();
+            }
+        }
+
         Component text = Component.empty();
         List<Component> lines = loadLines(t);
         for (int i = 0; i < lines.size(); i++) {
             if (i > 0) text = text.append(Component.newline());
             text = text.append(lines.get(i));
         }
-        t.text(text.colorIfAbsent(net.kyori.adventure.text.format.TextColor.color(rgb)));
-        t.setBrightness(glow ? new Display.Brightness(15, 15) : null);
         t.setShadowed(false);
+        if (glow) {
+            t.text(text.colorIfAbsent(net.kyori.adventure.text.format.TextColor.color(rgb)));
+            t.setBrightness(new Display.Brightness(15, 15));
+            spawnOutline(t, text, rgb == 0 ? 0xF0EBCC : darken(rgb), group);
+        } else {
+            t.text(text.colorIfAbsent(net.kyori.adventure.text.format.TextColor.color(darken(rgb))));
+            t.setBrightness(null);
+        }
+    }
+
+    /** Контур светящегося текста: 4 копии, сдвинутые на 1 пиксель табличной сетки (1/96 блока) по диагоналям. */
+    private void spawnOutline(TextDisplay main, Component text, int outlineRgb, String group) {
+        Transformation tr = main.getTransformation();
+        org.joml.Quaternionf rot = tr.getLeftRotation();
+        float d = 1f / 96f;
+        for (int sx = -1; sx <= 1; sx += 2) {
+            for (int sy = -1; sy <= 1; sy += 2) {
+                Vector3f off = new Vector3f(sx * d, sy * d, -0.0015f).rotate(rot);
+                Vector3f pos = new Vector3f(tr.getTranslation()).add(off);
+                main.getWorld().spawn(main.getLocation(), TextDisplay.class, o -> {
+                    o.text(text.color(net.kyori.adventure.text.format.TextColor.color(outlineRgb)));
+                    o.setBillboard(Display.Billboard.FIXED);
+                    o.setDefaultBackground(false);
+                    o.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+                    o.setShadowed(false);
+                    o.setBrightness(new Display.Brightness(15, 15));
+                    o.setTransformation(new Transformation(pos, rot, tr.getScale(), tr.getRightRotation()));
+                    PersistentDataContainer pdc = o.getPersistentDataContainer();
+                    pdc.set(groupKey, PersistentDataType.STRING, group);
+                    pdc.set(key("outline"), PersistentDataType.BYTE, (byte) 1);
+                });
+            }
+        }
     }
 
     private TextDisplay findText(Location near, String group) {
@@ -422,7 +495,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         }
         if (m.name().endsWith("_DYE")) {
             org.bukkit.DyeColor dye = org.bukkit.DyeColor.valueOf(m.name().substring(0, m.name().length() - 4));
-            pdc.set(key("color"), PersistentDataType.INTEGER, dye.getColor().asRGB());
+            pdc.set(key("color"), PersistentDataType.INTEGER, TEXT_COLORS.getOrDefault(dye, dye.getColor().asRGB()));
             consume(player, hand);
             at.getWorld().playSound(at, Sound.ITEM_DYE_USE, 1f, 1f);
         } else if (m == Material.GLOW_INK_SAC) {
