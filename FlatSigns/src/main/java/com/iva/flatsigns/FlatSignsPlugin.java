@@ -12,6 +12,7 @@ import org.bukkit.Sound;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.block.Sign;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.BlockDisplay;
@@ -193,16 +194,15 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         base.setYaw(p.yaw());
         base.setPitch(0);
 
-        Material planks = Material.matchMaterial(p.signType().name().replace("_SIGN", "_PLANKS"));
-        if (planks == null || !planks.isBlock()) planks = Material.OAK_PLANKS;
-        final Material planksType = planks;
-        // Локальная ось +Z смотрит от стены наружу; стена — на z = -0.5
+        // Локальная ось +Z смотрит от стены наружу; стена — на z = -0.5.
+        // Плита 1.0 x 0.5 с боковой гранью без растяжения, высота 4.5..12.5/16 как у ванильной
+        final BlockData slab = slabData(p.signType());
         b.getWorld().spawn(base, BlockDisplay.class, d -> {
-            d.setBlock(planksType.createBlockData());
+            d.setBlock(slab);
             d.setTransformation(new Transformation(
-                    new Vector3f(-0.5f, -0.25f, -0.5f),
+                    new Vector3f(-0.5f, -0.21875f, -0.5f),
                     new AxisAngle4f(),
-                    new Vector3f(1f, 0.5f, THICKNESS),
+                    new Vector3f(1f, 1f, THICKNESS),
                     new AxisAngle4f()));
             tag(d.getPersistentDataContainer(), group, null);
         });
@@ -220,7 +220,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
             t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
             t.setShadowed(false);
             t.setTransformation(new Transformation(
-                    new Vector3f(0f, -TEXT_SCALE / 2f, -0.5f + THICKNESS + 0.003f),
+                    new Vector3f(0f, -TEXT_SCALE / 2f + 0.03f, -0.5f + THICKNESS + 0.003f),
                     new AxisAngle4f(),
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
@@ -236,7 +236,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         double inset = 0.5 - THICKNESS / 2.0;
         for (int n = 0; n < 12; n++) {
             double k = -0.5 + THICKNESS / 2.0 + n * THICKNESS;
-            Location hit = b.getLocation().add(0.5 - f.getModX() * inset + ax * k, 0.25, 0.5 - f.getModZ() * inset + az * k);
+            Location hit = b.getLocation().add(0.5 - f.getModX() * inset + ax * k, 0.28125, 0.5 - f.getModZ() * inset + az * k);
             b.getWorld().spawn(hit, Interaction.class, i -> {
                 i.setInteractionWidth(THICKNESS);
                 i.setInteractionHeight(0.5f);
@@ -246,7 +246,116 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onSignEdit(SignChangeEvent event) {
+        Player player = event.getPlayer();
+        Pending p = pending.get(player.getUniqueId());
+        if (p == null || !p.block().equals(event.getBlock())) return;
+        pending.remove(player.getUniqueId());
+
+        List<Component> lines = event.lines();
+        event.setCancelled(true);
+        p.block().setType(Material.AIR, false);
+
+        if (p.editGroup() != null) {
+            TextDisplay t = findText(p.anchor().getLocation().add(0.5, 0.5, 0.5), p.editGroup());
+            if (t != null) {
+                storeLines(t, lines);
+                render(t);
+            }
+            return;
+        }
+
+        // Списываем табличку из руки
+        if (player.getGameMode() != GameMode.CREATIVE) {
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            if (hand.getType() != p.signType()) return; // предмет пропал из руки — не ставим
+            hand.setAmount(hand.getAmount() - 1);
+        }
+
+        if (p.wall() != null) spawnWallSign(p, lines);
+        else spawnFlatSign(p, lines);
+        p.anchor().getWorld().playSound(p.anchor().getLocation(), Sound.BLOCK_WOOD_PLACE, 1f, 1f);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        Pending p = pending.remove(event.getPlayer().getUniqueId());
+        if (p != null) p.block().setType(Material.AIR, false);
+    }
+
+    private void spawnFlatSign(Pending p, List<Component> lines) {
+        Block b = p.block();
+        String group = UUID.randomUUID().toString();
+        Location base = b.getLocation().add(0.5, 0, 0.5);
+        base.setYaw(p.yaw());
+        base.setPitch(0);
+
+        float boardY = p.ceiling() ? 1f - THICKNESS : 0f;
+
+        // Доска таблички — плита нужного дерева, положенная боком: её боковая грань 16x8
+        // даёт неискажённую текстуру размером 1.0 x 0.5, как у настоящей таблички
+        final BlockData slab = slabData(p.signType());
+        b.getWorld().spawn(base, BlockDisplay.class, d -> {
+            d.setBlock(slab);
+            d.setTransformation(new Transformation(
+                    new Vector3f(-0.5f, boardY + THICKNESS, -0.25f),
+                    new AxisAngle4f((float) (Math.PI / 2), 1f, 0f, 0f),
+                    new Vector3f(1f, 1f, THICKNESS),
+                    new AxisAngle4f()));
+            tag(d.getPersistentDataContainer(), group, null);
+        });
+
+        // Текст
+        Component text = Component.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) text = text.append(Component.newline());
+            text = text.append(lines.get(i));
+        }
+        final Component content = text.colorIfAbsent(NamedTextColor.BLACK);
+        float textY = p.ceiling() ? boardY - 0.002f : boardY + THICKNESS + 0.002f;
+        // На полу текст «растёт» от ближнего к игроку края, на потолке — наоборот
+        float textZ = p.ceiling() ? -TEXT_SCALE / 2f : TEXT_SCALE / 2f;
+        float angle = (float) Math.toRadians(p.ceiling() ? 90 : -90);
+        b.getWorld().spawn(base, TextDisplay.class, t -> {
+            storeLines(t, lines);
+            t.setBillboard(Display.Billboard.FIXED);
+            t.setDefaultBackground(false);
+            t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+            t.setShadowed(false);
+            t.setTransformation(new Transformation(
+                    new Vector3f(0f, textY, textZ),
+                    new AxisAngle4f(angle, 1f, 0f, 0f),
+                    new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
+                    new AxisAngle4f()));
+            tag(t.getPersistentDataContainer(), group, null);
+            render(t);
+        });
+
+        // Невидимый хитбокс, чтобы табличку можно было сломать
+        float hitHeight = 0.15f;
+        Location hitLoc = b.getLocation().add(0.5, p.ceiling() ? 1 - hitHeight : 0, 0.5);
+        b.getWorld().spawn(hitLoc, Interaction.class, i -> {
+            i.setInteractionWidth(0.9f);
+            i.setInteractionHeight(hitHeight);
+            i.setResponsive(true);
+            tag(i.getPersistentDataContainer(), group, p.signType().name());
+        });
+    }
+
+    private void tag(PersistentDataContainer pdc, String group, String item) {
+        pdc.set(groupKey, PersistentDataType.STRING, group);
+        if (item != null) pdc.set(itemKey, PersistentDataType.STRING, item);
+    }
+
     // ---------- Текст, краска, свечение, воск ----------
+
+    /** Плита того же дерева, что и табличка (нижняя половина). */
+    private static BlockData slabData(Material sign) {
+        Material m = Material.matchMaterial(sign.name().replace("_WALL", "").replace("_SIGN", "_SLAB"));
+        if (m == null || !m.isBlock()) m = Material.OAK_SLAB;
+        return m.createBlockData();
+    }
 
     private NamespacedKey key(String k) { return new NamespacedKey(this, k); }
 
@@ -279,11 +388,9 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
             if (i > 0) text = text.append(Component.newline());
             text = text.append(lines.get(i));
         }
-        int shown = rgb;
-        if (glow && rgb == 0x000000) shown = 0xF0EBCC; // светящийся чёрный в игре — светлый
-        t.text(text.colorIfAbsent(net.kyori.adventure.text.format.TextColor.color(shown)));
+        t.text(text.colorIfAbsent(net.kyori.adventure.text.format.TextColor.color(rgb)));
         t.setBrightness(glow ? new Display.Brightness(15, 15) : null);
-        t.setShadowed(glow);
+        t.setShadowed(false);
     }
 
     private TextDisplay findText(Location near, String group) {
