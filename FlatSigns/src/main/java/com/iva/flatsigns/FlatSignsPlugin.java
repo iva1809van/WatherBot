@@ -62,10 +62,20 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
      * block — временная табличка для ввода текста; anchor — блок, где появится табличка;
      * wall — сторона стены (null для пола/потолка).
      */
-    private record Pending(Block block, Material signType, boolean ceiling, float yaw, Block anchor, BlockFace wall) {
+    private record Pending(Block block, Material signType, boolean ceiling, float yaw, Block anchor, BlockFace wall, String editGroup) {
         Pending(Block block, Material signType, boolean ceiling, float yaw) {
-            this(block, signType, ceiling, yaw, block, null);
+            this(block, signType, ceiling, yaw, block, null, null);
         }
+        Pending(Block block, Material signType, boolean ceiling, float yaw, Block anchor, BlockFace wall) {
+            this(block, signType, ceiling, yaw, anchor, wall, null);
+        }
+    }
+
+    private static final Gson_ GSON = new Gson_();
+    /** Обёртка над сериализатором Adventure (компоненты ↔ JSON для хранения в PDC). */
+    private static final class Gson_ {
+        String to(Component c) { return net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().serialize(c); }
+        Component from(String s) { return net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().deserialize(s); }
     }
 
     @Override
@@ -204,7 +214,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         }
         final Component content = text.colorIfAbsent(NamedTextColor.BLACK);
         b.getWorld().spawn(base, TextDisplay.class, t -> {
-            t.text(content);
+            storeLines(t, lines);
             t.setBillboard(Display.Billboard.FIXED);
             t.setDefaultBackground(false);
             t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
@@ -215,17 +225,22 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
             tag(t.getPersistentDataContainer(), group, null);
+            render(t);
         });
 
         // Хитбокс у стены
+        // Хитбокс — 4 тонких секции вдоль доски, чтобы он совпадал с самой табличкой
         BlockFace f = p.wall();
-        Location hit = b.getLocation().add(0.5 - f.getModX() * 0.4, 0.25, 0.5 - f.getModZ() * 0.4);
-        b.getWorld().spawn(hit, Interaction.class, i -> {
-            i.setInteractionWidth(0.25f);
-            i.setInteractionHeight(0.5f);
-            i.setResponsive(true);
-            tag(i.getPersistentDataContainer(), group, p.signType().name());
-        });
+        double ax = f.getModZ() != 0 ? 1 : 0, az = f.getModX() != 0 ? 1 : 0; // ось вдоль стены
+        for (double k : new double[]{-0.375, -0.125, 0.125, 0.375}) {
+            Location hit = b.getLocation().add(0.5 - f.getModX() * 0.375 + ax * k, 0.25, 0.5 - f.getModZ() * 0.375 + az * k);
+            b.getWorld().spawn(hit, Interaction.class, i -> {
+                i.setInteractionWidth(0.25f);
+                i.setInteractionHeight(0.5f);
+                i.setResponsive(true);
+                tag(i.getPersistentDataContainer(), group, p.signType().name());
+            });
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -238,6 +253,15 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         List<Component> lines = event.lines();
         event.setCancelled(true);
         p.block().setType(Material.AIR, false);
+
+        if (p.editGroup() != null) {
+            TextDisplay t = findText(p.anchor().getLocation().add(0.5, 0.5, 0.5), p.editGroup());
+            if (t != null) {
+                storeLines(t, lines);
+                render(t);
+            }
+            return;
+        }
 
         // Списываем табличку из руки
         if (player.getGameMode() != GameMode.CREATIVE) {
@@ -292,7 +316,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         float textZ = p.ceiling() ? -TEXT_SCALE / 2f : TEXT_SCALE / 2f;
         float angle = (float) Math.toRadians(p.ceiling() ? 90 : -90);
         b.getWorld().spawn(base, TextDisplay.class, t -> {
-            t.text(content);
+            storeLines(t, lines);
             t.setBillboard(Display.Billboard.FIXED);
             t.setDefaultBackground(false);
             t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
@@ -303,6 +327,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
             tag(t.getPersistentDataContainer(), group, null);
+            render(t);
         });
 
         // Невидимый хитбокс, чтобы табличку можно было сломать
@@ -319,6 +344,132 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
     private void tag(PersistentDataContainer pdc, String group, String item) {
         pdc.set(groupKey, PersistentDataType.STRING, group);
         if (item != null) pdc.set(itemKey, PersistentDataType.STRING, item);
+    }
+
+    // ---------- Текст, краска, свечение, воск ----------
+
+    private NamespacedKey key(String k) { return new NamespacedKey(this, k); }
+
+    private void storeLines(TextDisplay t, List<Component> lines) {
+        PersistentDataContainer pdc = t.getPersistentDataContainer();
+        for (int i = 0; i < 4; i++) {
+            Component c = i < lines.size() ? lines.get(i) : Component.empty();
+            pdc.set(key("line" + i), PersistentDataType.STRING, GSON.to(c));
+        }
+    }
+
+    private List<Component> loadLines(TextDisplay t) {
+        PersistentDataContainer pdc = t.getPersistentDataContainer();
+        List<Component> out = new java.util.ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            String j = pdc.get(key("line" + i), PersistentDataType.STRING);
+            out.add(j == null ? Component.empty() : GSON.from(j));
+        }
+        return out;
+    }
+
+    /** Перерисовать текст с учётом цвета и свечения (как у обычной таблички). */
+    private void render(TextDisplay t) {
+        PersistentDataContainer pdc = t.getPersistentDataContainer();
+        int rgb = pdc.getOrDefault(key("color"), PersistentDataType.INTEGER, 0x000000);
+        boolean glow = pdc.getOrDefault(key("glow"), PersistentDataType.BYTE, (byte) 0) == 1;
+        Component text = Component.empty();
+        List<Component> lines = loadLines(t);
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) text = text.append(Component.newline());
+            text = text.append(lines.get(i));
+        }
+        int shown = rgb;
+        if (glow && rgb == 0x000000) shown = 0xF0EBCC; // светящийся чёрный в игре — светлый
+        t.text(text.colorIfAbsent(net.kyori.adventure.text.format.TextColor.color(shown)));
+        t.setBrightness(glow ? new Display.Brightness(15, 15) : null);
+        t.setShadowed(glow);
+    }
+
+    private TextDisplay findText(Location near, String group) {
+        for (Entity e : near.getWorld().getNearbyEntities(near, 1.5, 1.5, 1.5)) {
+            if (e instanceof TextDisplay t && group.equals(t.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING))) return t;
+        }
+        return null;
+    }
+
+    /** ПКМ по табличке: краситель, светящиеся/обычные чернила, соты или редактирование текста. */
+    @EventHandler(ignoreCancelled = true)
+    public void onUse(org.bukkit.event.player.PlayerInteractEntityEvent event) {
+        if (!(event.getRightClicked() instanceof Interaction hitbox) || event.getHand() != EquipmentSlot.HAND) return;
+        String group = hitbox.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING);
+        if (group == null) return;
+        event.setCancelled(true);
+        Player player = event.getPlayer();
+        TextDisplay t = findText(hitbox.getLocation(), group);
+        if (t == null) return;
+        PersistentDataContainer pdc = t.getPersistentDataContainer();
+        boolean waxed = pdc.getOrDefault(key("wax"), PersistentDataType.BYTE, (byte) 0) == 1;
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        Material m = hand.getType();
+        Location at = hitbox.getLocation();
+
+        if (waxed) {
+            at.getWorld().playSound(at, Sound.BLOCK_SIGN_WAXED_INTERACT_FAIL, 1f, 1f);
+            return;
+        }
+        if (m.name().endsWith("_DYE")) {
+            org.bukkit.DyeColor dye = org.bukkit.DyeColor.valueOf(m.name().substring(0, m.name().length() - 4));
+            pdc.set(key("color"), PersistentDataType.INTEGER, dye.getColor().asRGB());
+            consume(player, hand);
+            at.getWorld().playSound(at, Sound.ITEM_DYE_USE, 1f, 1f);
+        } else if (m == Material.GLOW_INK_SAC) {
+            pdc.set(key("glow"), PersistentDataType.BYTE, (byte) 1);
+            consume(player, hand);
+            at.getWorld().playSound(at, Sound.ITEM_GLOW_INK_SAC_USE, 1f, 1f);
+        } else if (m == Material.INK_SAC) {
+            pdc.set(key("glow"), PersistentDataType.BYTE, (byte) 0);
+            consume(player, hand);
+            at.getWorld().playSound(at, Sound.ITEM_INK_SAC_USE, 1f, 1f);
+        } else if (m == Material.HONEYCOMB) {
+            pdc.set(key("wax"), PersistentDataType.BYTE, (byte) 1);
+            consume(player, hand);
+            at.getWorld().playSound(at, Sound.ITEM_HONEYCOMB_WAX_ON, 1f, 1f);
+            at.getWorld().spawnParticle(org.bukkit.Particle.WAX_ON, at.clone().add(0, 0.3, 0), 6, 0.2, 0.2, 0.2);
+            return;
+        } else {
+            openEditor(player, t, group);
+            return;
+        }
+        render(t);
+    }
+
+    private void consume(Player player, ItemStack hand) {
+        if (player.getGameMode() != GameMode.CREATIVE) hand.setAmount(hand.getAmount() - 1);
+    }
+
+    /** Редактирование: временная табличка с текущим текстом, после ввода текст переносится обратно. */
+    private void openEditor(Player player, TextDisplay t, String group) {
+        if (pending.containsKey(player.getUniqueId())) return;
+        Block edit = null;
+        Block feet = player.getLocation().getBlock();
+        for (Block b : new Block[]{feet.getRelative(0, 2, 0), feet.getRelative(0, 1, 0), feet}) {
+            if (b.getType().isAir()) { edit = b; break; }
+        }
+        if (edit == null) return;
+        edit.setType(Material.OAK_SIGN, false);
+        if (!(edit.getState() instanceof Sign sign)) { edit.setType(Material.AIR, false); return; }
+        List<Component> lines = loadLines(t);
+        for (int i = 0; i < 4; i++) sign.getSide(Side.FRONT).line(i, lines.get(i));
+        sign.update(true, false);
+        Block anchor = t.getLocation().getBlock();
+        final Block editBlock = edit;
+        pending.put(player.getUniqueId(), new Pending(edit, Material.OAK_SIGN, false, 0, anchor, null, group));
+        getServer().getScheduler().runTask(this, () -> {
+            if (editBlock.getState() instanceof Sign s) player.openSign(s, Side.FRONT);
+        });
+        getServer().getScheduler().runTaskLater(this, () -> {
+            Pending p = pending.get(player.getUniqueId());
+            if (p != null && p.block().equals(editBlock)) {
+                pending.remove(player.getUniqueId());
+                editBlock.setType(Material.AIR, false);
+            }
+        }, 20L * 120);
     }
 
     @EventHandler(ignoreCancelled = true)
