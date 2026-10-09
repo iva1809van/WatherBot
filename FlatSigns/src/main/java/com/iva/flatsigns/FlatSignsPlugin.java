@@ -1,6 +1,5 @@
 package com.iva.flatsigns;
 
-import io.papermc.paper.event.player.PrePlayerAttackEntityEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Color;
@@ -52,6 +51,9 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
 
     private static final float THICKNESS = 1f / 12f;
     private static final float TEXT_SCALE = 0.4f;
+    /** Настенная табличка как ванильная: доска y 0.2708..0.7708, зазор от стены 0.021. */
+    private static final float WALL_Y0 = 0.2708f;
+    private static final float WALL_Z0 = -0.479f;
 
     private NamespacedKey groupKey;
     private NamespacedKey itemKey;
@@ -200,7 +202,7 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         b.getWorld().spawn(base, BlockDisplay.class, d -> {
             d.setBlock(slab);
             d.setTransformation(new Transformation(
-                    new Vector3f(-0.5f, -0.21875f, -0.5f),
+                    new Vector3f(-0.5f, WALL_Y0 - 0.5f, WALL_Z0),
                     new AxisAngle4f(),
                     new Vector3f(1f, 1f, THICKNESS),
                     new AxisAngle4f()));
@@ -220,30 +222,14 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
             t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
             t.setShadowed(false);
             t.setTransformation(new Transformation(
-                    new Vector3f(0f, -TEXT_SCALE / 2f + 0.03f, -0.5f + THICKNESS + 0.003f),
+                    new Vector3f(0f, -TEXT_SCALE / 2f + 0.035f, WALL_Z0 + THICKNESS + 0.003f),
                     new AxisAngle4f(),
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
-            tag(t.getPersistentDataContainer(), group, null);
+            tag(t.getPersistentDataContainer(), group, p.signType().name());
+            setBox(t, base, 0f, WALL_Y0 + 0.25f - 0.5f, WALL_Z0 + THICKNESS / 2f, p.yaw(), 0.5f, 0.25f, THICKNESS / 2f);
         });
         render(main);
-
-        // Хитбокс у стены
-        // Хитбокс ровно по доске: Interaction квадратный в плане, поэтому доску
-        // толщиной 1/12 блока перекрываем 12 секциями шириной 1/12 вплотную к стене
-        BlockFace f = p.wall();
-        double ax = f.getModZ() != 0 ? 1 : 0, az = f.getModX() != 0 ? 1 : 0; // ось вдоль стены
-        double inset = 0.5 - THICKNESS / 2.0;
-        for (int n = 0; n < 12; n++) {
-            double k = -0.5 + THICKNESS / 2.0 + n * THICKNESS;
-            Location hit = b.getLocation().add(0.5 - f.getModX() * inset + ax * k, 0.28125, 0.5 - f.getModZ() * inset + az * k);
-            b.getWorld().spawn(hit, Interaction.class, i -> {
-                i.setInteractionWidth(THICKNESS);
-                i.setInteractionHeight(0.5f);
-                i.setResponsive(true);
-                tag(i.getPersistentDataContainer(), group, p.signType().name());
-            });
-        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -328,19 +314,10 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
                     new AxisAngle4f(angle, 1f, 0f, 0f),
                     new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
                     new AxisAngle4f()));
-            tag(t.getPersistentDataContainer(), group, null);
+            tag(t.getPersistentDataContainer(), group, p.signType().name());
+            setBox(t, base, 0f, boardY + THICKNESS / 2f, 0f, p.yaw(), 0.5f, THICKNESS / 2f, 0.25f);
         });
         render(main);
-
-        // Невидимый хитбокс, чтобы табличку можно было сломать
-        float hitHeight = 0.15f;
-        Location hitLoc = b.getLocation().add(0.5, p.ceiling() ? 1 - hitHeight : 0, 0.5);
-        b.getWorld().spawn(hitLoc, Interaction.class, i -> {
-            i.setInteractionWidth(0.9f);
-            i.setInteractionHeight(hitHeight);
-            i.setResponsive(true);
-            tag(i.getPersistentDataContainer(), group, p.signType().name());
-        });
     }
 
     private void tag(PersistentDataContainer pdc, String group, String item) {
@@ -473,21 +450,92 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         return null;
     }
 
-    /** ПКМ по табличке: краситель, светящиеся/обычные чернила, соты или редактирование текста. */
-    @EventHandler(ignoreCancelled = true)
-    public void onUse(org.bukkit.event.player.PlayerInteractEntityEvent event) {
-        if (!(event.getRightClicked() instanceof Interaction hitbox) || event.getHand() != EquipmentSlot.HAND) return;
-        String group = hitbox.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING);
-        if (group == null) return;
-        event.setCancelled(true);
+    // ---------- Клики без хитбоксов: трассировка луча по ориентированной коробке доски ----------
+
+    private void setBox(TextDisplay t, Location base, float lx, float ly, float lz, float yaw, float hx, float hy, float hz) {
+        double r = Math.toRadians(yaw);
+        double zx = -Math.sin(r), zz = Math.cos(r), xx = Math.cos(r), xz = Math.sin(r);
+        double cx = base.getX() + lx * xx + lz * zx;
+        double cz = base.getZ() + lx * xz + lz * zz;
+        double cy = base.getY() + ly;
+        t.getPersistentDataContainer().set(key("box"), PersistentDataType.STRING,
+                cx + "," + cy + "," + cz + "," + yaw + "," + hx + "," + hy + "," + hz);
+    }
+
+    /** Расстояние до доски вдоль луча или -1. */
+    private double hitDistance(TextDisplay t, Location eye, org.bukkit.util.Vector dir, double max) {
+        String raw = t.getPersistentDataContainer().get(key("box"), PersistentDataType.STRING);
+        if (raw == null) return -1;
+        String[] a = raw.split(",");
+        double cx = Double.parseDouble(a[0]), cy = Double.parseDouble(a[1]), cz = Double.parseDouble(a[2]);
+        double r = Math.toRadians(Double.parseDouble(a[3]));
+        double[] h = {Double.parseDouble(a[4]), Double.parseDouble(a[5]), Double.parseDouble(a[6])};
+        double zx = -Math.sin(r), zz = Math.cos(r), xx = Math.cos(r), xz = Math.sin(r);
+        double ox = eye.getX() - cx, oy = eye.getY() - cy, oz = eye.getZ() - cz;
+        double[] o = {ox * xx + oz * xz, oy, ox * zx + oz * zz};
+        double[] d = {dir.getX() * xx + dir.getZ() * xz, dir.getY(), dir.getX() * zx + dir.getZ() * zz};
+        double tmin = 0, tmax = max;
+        for (int i = 0; i < 3; i++) {
+            if (Math.abs(d[i]) < 1e-9) {
+                if (Math.abs(o[i]) > h[i]) return -1;
+            } else {
+                double t1 = (-h[i] - o[i]) / d[i], t2 = (h[i] - o[i]) / d[i];
+                if (t1 > t2) { double x = t1; t1 = t2; t2 = x; }
+                tmin = Math.max(tmin, t1);
+                tmax = Math.min(tmax, t2);
+                if (tmin > tmax) return -1;
+            }
+        }
+        return tmin;
+    }
+
+    private TextDisplay targetSign(Player player) {
+        Location eye = player.getEyeLocation();
+        org.bukkit.util.Vector dir = eye.getDirection();
+        double reach = 4.5;
+        org.bukkit.util.RayTraceResult blk = player.getWorld().rayTraceBlocks(eye, dir, reach, org.bukkit.FluidCollisionMode.NEVER, true);
+        double limit = blk == null ? reach : eye.toVector().distance(blk.getHitPosition()) + 0.05;
+        TextDisplay best = null;
+        double bd = limit;
+        for (Entity e : player.getWorld().getNearbyEntities(eye, 6, 6, 6)) {
+            if (!(e instanceof TextDisplay t)) continue;
+            double d = hitDistance(t, eye, dir, limit);
+            if (d >= 0 && d <= bd) { bd = d; best = t; }
+        }
+        return best;
+    }
+
+    @EventHandler(priority = EventPriority.LOW)
+    public void onClick(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        Action a = event.getAction();
+        if (a == Action.PHYSICAL) return;
         Player player = event.getPlayer();
-        TextDisplay t = findText(hitbox.getLocation(), group);
+        TextDisplay t = targetSign(player);
         if (t == null) return;
+        event.setCancelled(true);
+        event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+        event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+        if (a == Action.LEFT_CLICK_AIR || a == Action.LEFT_CLICK_BLOCK) breakSign(player, t);
+        else use(player, t);
+    }
+
+    @EventHandler
+    public void onChunkLoad(org.bukkit.event.world.ChunkLoadEvent event) {
+        for (Entity e : event.getChunk().getEntities()) {
+            if (e instanceof Interaction i && i.getPersistentDataContainer().has(groupKey, PersistentDataType.STRING)) i.remove();
+        }
+    }
+
+    /** ПКМ по табличке: краситель, светящиеся/обычные чернила, соты или редактирование текста. */
+    private void use(Player player, TextDisplay t) {
+        String group = t.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING);
+        if (group == null) return;
         PersistentDataContainer pdc = t.getPersistentDataContainer();
         boolean waxed = pdc.getOrDefault(key("wax"), PersistentDataType.BYTE, (byte) 0) == 1;
         ItemStack hand = player.getInventory().getItemInMainHand();
         Material m = hand.getType();
-        Location at = hitbox.getLocation();
+        Location at = t.getLocation();
 
         if (waxed) {
             at.getWorld().playSound(at, Sound.BLOCK_SIGN_WAXED_INTERACT_FAIL, 1f, 1f);
@@ -552,26 +600,19 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         }, 20L * 120);
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onBreak(PrePlayerAttackEntityEvent event) {
-        if (!(event.getAttacked() instanceof Interaction hitbox)) return;
-        PersistentDataContainer pdc = hitbox.getPersistentDataContainer();
+    private void breakSign(Player player, TextDisplay t) {
+        PersistentDataContainer pdc = t.getPersistentDataContainer();
         String group = pdc.get(groupKey, PersistentDataType.STRING);
         if (group == null) return;
-        event.setCancelled(true);
-
-        for (Entity e : hitbox.getNearbyEntities(1.5, 1.5, 1.5)) {
-            if (group.equals(e.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING))) {
-                e.remove();
-            }
+        Location loc = t.getLocation();
+        Material item = Material.matchMaterial(String.valueOf(pdc.get(itemKey, PersistentDataType.STRING)));
+        if (item == null) item = Material.OAK_SIGN;
+        for (Entity e : t.getNearbyEntities(1.5, 1.5, 1.5)) {
+            if (group.equals(e.getPersistentDataContainer().get(groupKey, PersistentDataType.STRING))) e.remove();
         }
-        hitbox.remove();
-
-        Location loc = hitbox.getLocation();
+        t.remove();
         loc.getWorld().playSound(loc, Sound.BLOCK_WOOD_BREAK, 1f, 1f);
-        if (event.getPlayer().getGameMode() != GameMode.CREATIVE) {
-            Material item = Material.matchMaterial(String.valueOf(pdc.get(itemKey, PersistentDataType.STRING)));
-            if (item == null) item = Material.OAK_SIGN;
+        if (player.getGameMode() != GameMode.CREATIVE) {
             loc.getWorld().dropItemNaturally(loc.add(0, 0.1, 0), new ItemStack(item));
         }
     }
