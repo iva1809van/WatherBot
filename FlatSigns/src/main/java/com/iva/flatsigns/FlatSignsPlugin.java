@@ -229,121 +229,21 @@ public final class FlatSignsPlugin extends JavaPlugin implements Listener {
         });
 
         // Хитбокс у стены
-        // Хитбокс — 4 тонких секции вдоль доски, чтобы он совпадал с самой табличкой
+        // Хитбокс ровно по доске: Interaction квадратный в плане, поэтому доску
+        // толщиной 1/12 блока перекрываем 12 секциями шириной 1/12 вплотную к стене
         BlockFace f = p.wall();
         double ax = f.getModZ() != 0 ? 1 : 0, az = f.getModX() != 0 ? 1 : 0; // ось вдоль стены
-        for (double k : new double[]{-0.375, -0.125, 0.125, 0.375}) {
-            Location hit = b.getLocation().add(0.5 - f.getModX() * 0.375 + ax * k, 0.25, 0.5 - f.getModZ() * 0.375 + az * k);
+        double inset = 0.5 - THICKNESS / 2.0;
+        for (int n = 0; n < 12; n++) {
+            double k = -0.5 + THICKNESS / 2.0 + n * THICKNESS;
+            Location hit = b.getLocation().add(0.5 - f.getModX() * inset + ax * k, 0.25, 0.5 - f.getModZ() * inset + az * k);
             b.getWorld().spawn(hit, Interaction.class, i -> {
-                i.setInteractionWidth(0.25f);
+                i.setInteractionWidth(THICKNESS);
                 i.setInteractionHeight(0.5f);
                 i.setResponsive(true);
                 tag(i.getPersistentDataContainer(), group, p.signType().name());
             });
         }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onSignEdit(SignChangeEvent event) {
-        Player player = event.getPlayer();
-        Pending p = pending.get(player.getUniqueId());
-        if (p == null || !p.block().equals(event.getBlock())) return;
-        pending.remove(player.getUniqueId());
-
-        List<Component> lines = event.lines();
-        event.setCancelled(true);
-        p.block().setType(Material.AIR, false);
-
-        if (p.editGroup() != null) {
-            TextDisplay t = findText(p.anchor().getLocation().add(0.5, 0.5, 0.5), p.editGroup());
-            if (t != null) {
-                storeLines(t, lines);
-                render(t);
-            }
-            return;
-        }
-
-        // Списываем табличку из руки
-        if (player.getGameMode() != GameMode.CREATIVE) {
-            ItemStack hand = player.getInventory().getItemInMainHand();
-            if (hand.getType() != p.signType()) return; // предмет пропал из руки — не ставим
-            hand.setAmount(hand.getAmount() - 1);
-        }
-
-        if (p.wall() != null) spawnWallSign(p, lines);
-        else spawnFlatSign(p, lines);
-        p.anchor().getWorld().playSound(p.anchor().getLocation(), Sound.BLOCK_WOOD_PLACE, 1f, 1f);
-    }
-
-    @EventHandler
-    public void onQuit(PlayerQuitEvent event) {
-        Pending p = pending.remove(event.getPlayer().getUniqueId());
-        if (p != null) p.block().setType(Material.AIR, false);
-    }
-
-    private void spawnFlatSign(Pending p, List<Component> lines) {
-        Block b = p.block();
-        String group = UUID.randomUUID().toString();
-        Location base = b.getLocation().add(0.5, 0, 0.5);
-        base.setYaw(p.yaw());
-        base.setPitch(0);
-
-        float boardY = p.ceiling() ? 1f - THICKNESS : 0f;
-
-        // Доска таблички — тонкий блок досок
-        Material planks = Material.matchMaterial(p.signType().name().replace("_SIGN", "_PLANKS"));
-        if (planks == null || !planks.isBlock()) planks = Material.OAK_PLANKS;
-        final Material planksType = planks;
-        b.getWorld().spawn(base, BlockDisplay.class, d -> {
-            d.setBlock(planksType.createBlockData());
-            d.setTransformation(new Transformation(
-                    new Vector3f(-0.5f, boardY, -0.25f),
-                    new AxisAngle4f(),
-                    new Vector3f(1f, THICKNESS, 0.5f),
-                    new AxisAngle4f()));
-            tag(d.getPersistentDataContainer(), group, null);
-        });
-
-        // Текст
-        Component text = Component.empty();
-        for (int i = 0; i < lines.size(); i++) {
-            if (i > 0) text = text.append(Component.newline());
-            text = text.append(lines.get(i));
-        }
-        final Component content = text.colorIfAbsent(NamedTextColor.BLACK);
-        float textY = p.ceiling() ? boardY - 0.002f : boardY + THICKNESS + 0.002f;
-        // На полу текст «растёт» от ближнего к игроку края, на потолке — наоборот
-        float textZ = p.ceiling() ? -TEXT_SCALE / 2f : TEXT_SCALE / 2f;
-        float angle = (float) Math.toRadians(p.ceiling() ? 90 : -90);
-        b.getWorld().spawn(base, TextDisplay.class, t -> {
-            storeLines(t, lines);
-            t.setBillboard(Display.Billboard.FIXED);
-            t.setDefaultBackground(false);
-            t.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
-            t.setShadowed(false);
-            t.setTransformation(new Transformation(
-                    new Vector3f(0f, textY, textZ),
-                    new AxisAngle4f(angle, 1f, 0f, 0f),
-                    new Vector3f(TEXT_SCALE, TEXT_SCALE, TEXT_SCALE),
-                    new AxisAngle4f()));
-            tag(t.getPersistentDataContainer(), group, null);
-            render(t);
-        });
-
-        // Невидимый хитбокс, чтобы табличку можно было сломать
-        float hitHeight = 0.15f;
-        Location hitLoc = b.getLocation().add(0.5, p.ceiling() ? 1 - hitHeight : 0, 0.5);
-        b.getWorld().spawn(hitLoc, Interaction.class, i -> {
-            i.setInteractionWidth(0.9f);
-            i.setInteractionHeight(hitHeight);
-            i.setResponsive(true);
-            tag(i.getPersistentDataContainer(), group, p.signType().name());
-        });
-    }
-
-    private void tag(PersistentDataContainer pdc, String group, String item) {
-        pdc.set(groupKey, PersistentDataType.STRING, group);
-        if (item != null) pdc.set(itemKey, PersistentDataType.STRING, item);
     }
 
     // ---------- Текст, краска, свечение, воск ----------
