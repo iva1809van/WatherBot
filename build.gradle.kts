@@ -11,7 +11,7 @@ subprojects {
 
     dependencies {
         // Paper 26.1.1 API (как на сервере: 26.1.1.build.N-...)
-        "compileOnly"("io.papermc.paper:paper-api:26.1.1.build.+")
+        "compileOnly"("io.papermc.paper:paper-api:26.3.build.+")
     }
 
     extensions.configure<JavaPluginExtension> {
