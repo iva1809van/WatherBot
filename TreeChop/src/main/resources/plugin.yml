@@ -1,7 +1,7 @@
 name: TreeChop
 version: '${version}'
 main: com.iva.treechop.TreeChopPlugin
-api-version: '26.1'
+api-version: '26.3'
 description: "Ломает всё дерево целиком (с листвой). С зажатым Shift — как обычно."
 permissions:
   treechop.use:
